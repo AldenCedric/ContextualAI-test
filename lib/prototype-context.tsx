@@ -1,11 +1,13 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import type { ServiceMode } from "./types";
+import type { ServiceMode, LanguageMode } from "./types";
 
 export interface PrototypeSettings {
   serviceMode: ServiceMode;
+  languageMode: LanguageMode;
   showReviewCheckpoint: boolean;
+  showDocumentEvidence: boolean;
   showFuturePlaceholders: boolean;
 }
 
@@ -13,14 +15,20 @@ interface PrototypeContextType {
   settings: PrototypeSettings;
   updateSettings: (newSettings: Partial<PrototypeSettings>) => void;
   isMounted: boolean;
-  // Convenience accessors so consumers don't need to go through settings.*
+  // Service Mode
   serviceMode: ServiceMode;
   setServiceMode: (mode: ServiceMode) => void;
+  // Language Mode
+  languageMode: LanguageMode;
+  setLanguageMode: (mode: LanguageMode) => void;
+  // Toggles
   showReviewCheckpoint: boolean;
   setShowReviewCheckpoint: (v: boolean) => void;
+  showDocumentEvidence: boolean;
+  setShowDocumentEvidence: (v: boolean) => void;
   showFuturePlaceholders: boolean;
   setShowFuturePlaceholders: (v: boolean) => void;
-  // Legacy alias used by some pages
+  // Legacy aliases
   currentMode: ServiceMode;
   fallbackLevel: ServiceMode;
   setFallbackLevel: (mode: ServiceMode) => void;
@@ -28,7 +36,9 @@ interface PrototypeContextType {
 
 const defaultSettings: PrototypeSettings = {
   serviceMode: "primary",
+  languageMode: "english",
   showReviewCheckpoint: true,
+  showDocumentEvidence: true,
   showFuturePlaceholders: true,
 };
 
@@ -69,8 +79,12 @@ export function PrototypeProvider({ children }: { children: React.ReactNode }) {
 
   const setServiceMode = (mode: ServiceMode) =>
     updateSettings({ serviceMode: mode });
+  const setLanguageMode = (mode: LanguageMode) =>
+    updateSettings({ languageMode: mode });
   const setShowReviewCheckpoint = (v: boolean) =>
     updateSettings({ showReviewCheckpoint: v });
+  const setShowDocumentEvidence = (v: boolean) =>
+    updateSettings({ showDocumentEvidence: v });
   const setShowFuturePlaceholders = (v: boolean) =>
     updateSettings({ showFuturePlaceholders: v });
 
@@ -81,8 +95,12 @@ export function PrototypeProvider({ children }: { children: React.ReactNode }) {
     // Convenience
     serviceMode: settings.serviceMode,
     setServiceMode,
+    languageMode: settings.languageMode,
+    setLanguageMode,
     showReviewCheckpoint: settings.showReviewCheckpoint,
     setShowReviewCheckpoint,
+    showDocumentEvidence: settings.showDocumentEvidence,
+    setShowDocumentEvidence,
     showFuturePlaceholders: settings.showFuturePlaceholders,
     setShowFuturePlaceholders,
     // Legacy aliases
@@ -104,8 +122,12 @@ const fallbackContextValue: PrototypeContextType = {
   isMounted: false,
   serviceMode: "primary",
   setServiceMode: () => {},
+  languageMode: "english",
+  setLanguageMode: () => {},
   showReviewCheckpoint: true,
   setShowReviewCheckpoint: () => {},
+  showDocumentEvidence: true,
+  setShowDocumentEvidence: () => {},
   showFuturePlaceholders: true,
   setShowFuturePlaceholders: () => {},
   currentMode: "primary",

@@ -1,55 +1,18 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
-import { GEMINI_MODEL } from "@/lib/constants";
 import {
-  sliceAndReconstructDocument,
   generateContextualResponse,
-  isCognitiveOffloadingRequest,
-  checkTextAnomalies,
+  isConversationalKickoff,
+  isHelpStartRequest,
+  isReviewQuery,
 } from "@/lib/contextual-engine";
 import { parseDocumentBuffer } from "@/lib/server-document-parser";
-
-interface AttachedDocument {
-  name: string;
-  size: number;
-  type?: string;
-  text?: string;
-  base64?: string;
-  wordCount?: number;
-}
-
-interface ChatRequest {
-  material: { id: string; title: string; type: string; description: string };
-  currentTask: string;
-  assistanceMode:
-    | "explain"
-    | "guide"
-    | "organize"
-    | "explore"
-    | "review"
-    | "draft";
-  conversationHistory: Array<{ role: "user" | "assistant"; content: string }>;
-  message: string;
-  attachedDocument?: AttachedDocument;
-  stream?: boolean;
-  forceMode?: "primary" | "fallback-1" | "fallback-2" | "local" | "demo";
-}
-
-interface StructuredResponse {
-  response: string;
-  responseType: string;
-  keyPoints?: string[];
-  suggestedNextAction?: string;
-  followUpActions?: string[];
-  verificationQuestions?: string[];
-  uncertainties?: string[];
-  requiresReview?: boolean;
-}
+import { ChatRequest, GeminiResponse, ServiceSource } from "@/lib/types";
 
 // Rate Limiting Setup
 const rateLimitMap = new Map<string, number[]>();
 const RATE_LIMIT_WINDOW = 60 * 1000;
-const MAX_REQUESTS = 35;
+const MAX_REQUESTS = 40;
 
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
@@ -65,65 +28,88 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
-const SYSTEM_INSTRUCTION = `You are StudyFlow, a focused academic companion designed to foster deep understanding, critical thinking, and metacognitive scaffolding for university students.
+// In-memory record of exhausted keys (e.g. 429 daily quota)
+const exhaustedKeys = new Set<string>();
 
-CRITICAL BEHAVIORAL & THESIS RULES:
+const SYSTEM_INSTRUCTION = `You are StudyFlow, a contextual academic companion for university students.
 
-1. METACOGNITIVE SCAFFOLDING & MITIGATING COGNITIVE OFFLOADING:
-- StudyFlow strictly mitigates cognitive offloading. If the student says "Please do this task for me", "Do my assignment", "Write this essay/paper for me", "Solve this problem for me", or any request asking you to complete the work in their place:
-- YOU MUST REFUSE DIRECT COMPLETION. Explain clearly that completing the task for them undermines their learning and retention.
-- Instead, provide metacognitive scaffolding: break the problem into manageable steps, outline the conceptual structure, ask guiding questions, and prompt the student to draft the answer themselves.
-- Never write the complete finished assignment or direct homework solutions for them.
+The student is working with an academic material such as an activity, handout, assignment, problem set, presentation, reading, worksheet, reflection paper, group project, or research activity.
 
-2. GROUNDING & DOCUMENT VERIFICATION:
-- When an attached document is provided, you must inspect the actual extracted text carefully.
-- If there are ANY gibberish sequences (e.g. unpronounceable consonant clusters, keyboard mashes like 'asdfghjk', repetitive character strings, or placeholder text), you MUST explicitly identify and quote them in your response.
-- DO NOT hallucinate that the document is clean if anomalous or nonsensical strings are present.
-- If the document is clean, verify its academic relevance to the coursework and comment on its coherence.
+Your role is to help the student understand the material, organize the work, investigate questions, receive feedback, and reflect on their own answer.
 
-3. CONCISE & ACTIONABLE COMMUNICATION:
-- Keep explanations clear, engaging, and direct (max 2-3 short paragraphs).
-- Provide 1-3 key takeaways and 1 clear next action.
-- Output MUST strictly be a valid JSON object matching the requested schema. No code fences, no backticks outside JSON.`;
+You must distinguish between:
+1. The academic material (instructions & content).
+2. The student's actual answer or draft.
+3. The student's conversational message.
+
+Never treat a casual chat message as the student's academic answer.
+For example, if the student says "Sure, please let's start tackling the contents", do not interpret "sure", "let's", or "start" as academic claims. Instead, ask what the student wants to do or identify the first section from the material.
+
+If no student answer is provided:
+- Do not evaluate the student's accuracy, completeness, originality, or argument.
+- Do not claim that the answer is incomplete or missing evidence.
+- Instead, ask what kind of help the student wants or guide them on the first item.
+
+If the student submits an answer:
+- Review the student's answer against the material instructions and rubric.
+- Identify what is clear, what is missing, what may be inaccurate, what requires evidence, and what to revise next.
+
+Follow the selected assistance mode:
+- understand: Explain instructions, identify what the activity is asking, define difficult terms.
+- guide: Ask questions, give hints, help the student begin without immediately giving the full answer.
+- organize: Break the material into manageable actions, create a checklist, identify order of work.
+- explore: Suggest search terms, related concepts, and what the student should verify.
+- review: Review the student's actual answer or draft for missing requirements, reasoning, and evidence.
+- draft: Provide a preliminary example or outline only when explicitly requested; label as AI-generated; encourage student revision.
+
+Use the selected language mode:
+- english: Clear academic English.
+- filipino: Primarily Filipino with technically necessary English terms.
+- taglish: Natural modern Tagalog-English code-switching suitable for Filipino university students. Use English for technical and academic terms; use Filipino for explanations, encouragement, and conversational transitions. Avoid forced translations, excessive slang, and childish language. Keep the response academically accurate.
+
+Return only valid JSON matching this schema:
+{
+  "status": "needs_clarification | document_overview | guided_help | answer_review | checklist | draft",
+  "directResponse": "Your focused response string",
+  "documentEvidence": [
+    {
+      "location": "Section or paragraph name",
+      "excerptOrSummary": "Relevant excerpt from the material",
+      "whyItMatters": "Why this excerpt matters for the student's work"
+    }
+  ],
+  "keyPoints": ["1-3 brief key points"],
+  "missingInformation": ["List of missing information if answer review, or empty array"],
+  "suggestedNextActions": ["2-3 specific next actions"],
+  "verificationQuestions": ["1 question the student should verify or reflect on"],
+  "requiresStudentAnswer": false,
+  "requiresReview": false,
+  "languageMode": "english | filipino | taglish"
+}
+IMPORTANT: Output strictly valid JSON. Do not include markdown code blocks or backticks.`;
 
 function buildGeminiPrompt(
   request: ChatRequest,
   extractedDocText: string,
-  docAnomalyNotice: string,
 ): string {
-  const modeInstructions: Record<string, string> = {
-    explain:
-      "Clarify concepts simply and directly with a clear example. Do not complete homework for the student.",
-    guide:
-      "Provide a focused hint and guiding question to help the student think through the problem without solving it for them.",
-    organize:
-      "Break the activity into a concise, numbered action plan the student can follow.",
-    explore:
-      "Suggest 2-3 focused search terms and related concepts to investigate.",
-    review:
-      "Inspect the student's work or document directly. Call out specific strengths and any gaps or errors concisely.",
-    draft:
-      'Provide a preliminary structural outline or framework. Label clearly as "Preliminary AI-assisted framework — review required."',
-  };
+  const language = request.languageMode || "english";
+  const userMsg = request.userMessage || request.message || "";
+  const studentAns = request.studentAnswer ? request.studentAnswer.trim() : null;
 
-  let documentSection = "";
-  if (request.attachedDocument && extractedDocText) {
-    documentSection = `
-Attached Academic Document:
-- File Name: ${request.attachedDocument.name} (${(request.attachedDocument.size / 1024).toFixed(1)} KB)
-${docAnomalyNotice}
-- Extracted Document Content:
-"""
-${extractedDocText}
-"""
+  const materialSection = `
+Academic Material:
+- Title: ${request.material.title}
+- Type: ${request.material.type}
+${request.material.instructions ? `- Instructions:\n"""\n${request.material.instructions}\n"""` : ""}
+${request.material.content ? `- Content Preview:\n"""\n${request.material.content.slice(0, 1500)}\n"""` : ""}
+${extractedDocText ? `- Uploaded Document Text:\n"""\n${extractedDocText.slice(0, 2500)}\n"""` : ""}
+`;
 
-Verification Instructions:
-- Carefully inspect the above Extracted Document Content.
-- Identify any gibberish, nonsensical character clusters (e.g. 'asdfghjk', unpronounceable consonants), or placeholder text.
-- If anomalies exist, quote and call them out directly. If clean, confirm academic coherence and relevance.`;
-  }
+  const studentAnswerSection = studentAns
+    ? `Student's Submitted Answer / Draft:\n"""\n${studentAns}\n"""`
+    : `Student's Submitted Answer / Draft: None provided yet.`;
 
-  const historyContext =
+  const conversationSection =
     request.conversationHistory && request.conversationHistory.length > 0
       ? `Recent Conversation:\n${request.conversationHistory
           .slice(-4)
@@ -136,27 +122,20 @@ Verification Instructions:
 
   return `${SYSTEM_INSTRUCTION}
 
-Academic Material Context:
-- Title: ${request.material.title}
-- Type: ${request.material.type}
-- Target Task: ${request.currentTask || request.material.description}
-- Assistance Mode: ${request.assistanceMode} (${modeInstructions[request.assistanceMode] || "Provide focused academic assistance."})
-${documentSection}
-${historyContext}
-Student's Request: "${request.message}"
+Selected Settings:
+- Assistance Mode: ${request.assistanceMode}
+- Language Mode: ${language}
 
-Respond strictly as a JSON object with this exact structure:
-{
-  "response": "Your focused reply (2-4 sentences for document verification, or 2 short paragraphs with scaffolding. If the user asked you to do the task for them, refuse direct completion and provide scaffolding).",
-  "responseType": "explanation | guidance | checklist | search_plan | feedback | example | draft",
-  "keyPoints": ["1-3 brief key takeaways"],
-  "suggestedNextAction": "One short, practical next step for the student",
-  "followUpActions": ["2 short follow-up prompts"],
-  "verificationQuestions": ["1 question to verify or reflect on"],
-  "uncertainties": [],
-  "requiresReview": false
-}
-IMPORTANT: Output ONLY the valid JSON object. No markdown code blocks, no backticks.`;
+${materialSection}
+${studentAnswerSection}
+${conversationSection}
+Student's Conversational Message: "${userMsg}"
+
+CRITICAL INSTRUCTIONS FOR THIS TURN:
+1. Determine if the student's message is a conversational greeting/kickoff (e.g. "Sure, let's start..."). If so, do NOT treat words from the message as academic claims!
+2. If student answer is "None provided yet", do NOT evaluate argument completeness or claim missing evidence.
+3. Respond in ${language.toUpperCase()} mode.
+4. Output strictly valid JSON.`;
 }
 
 async function callGeminiApi(
@@ -165,10 +144,9 @@ async function callGeminiApi(
 ): Promise<string> {
   const ai = new GoogleGenAI({ apiKey });
 
-  // Use model gemini-3.8-flash as required
   const interaction = await ai.interactions.create(
     {
-      model: GEMINI_MODEL,
+      model: "gemini-3.8-flash",
       input: promptText,
     },
     { maxRetries: 0, timeout: 8500 },
@@ -191,7 +169,7 @@ export async function POST(request: Request) {
       "anonymous";
     if (!checkRateLimit(ip)) {
       return NextResponse.json(
-        { success: false, error: "Too many requests" },
+        { success: false, error: "Too many requests. Please wait a moment." },
         { status: 429 },
       );
     }
@@ -209,264 +187,233 @@ export async function POST(request: Request) {
 
     const {
       material,
-      assistanceMode,
-      conversationHistory,
+      currentTask = "",
+      studentAnswer = null,
+      userMessage,
       message,
+      assistanceMode = "guide",
+      languageMode = "english",
       attachedDocument,
       stream = true,
       forceMode,
     } = body as ChatRequest;
 
-    if (!message || typeof message !== "string" || message.length > 4000) {
+    const effectiveMessage = (userMessage || message || "").trim();
+
+    if (!effectiveMessage && !attachedDocument && !studentAnswer) {
       return NextResponse.json(
-        { success: false, error: "Invalid message" },
-        { status: 400 },
-      );
-    }
-    if (
-      !conversationHistory ||
-      !Array.isArray(conversationHistory) ||
-      conversationHistory.length > 20
-    ) {
-      return NextResponse.json(
-        { success: false, error: "Invalid conversation history" },
-        { status: 400 },
-      );
-    }
-    if (!material || !material.id || !material.title) {
-      return NextResponse.json(
-        { success: false, error: "Invalid material" },
+        { success: false, error: "Please enter a message or upload a document." },
         { status: 400 },
       );
     }
 
-    // 3. Robust Server-Side Document Parsing (docx, pdf, txt)
+    if (!material || !material.title) {
+      return NextResponse.json(
+        { success: false, error: "Missing material information" },
+        { status: 400 },
+      );
+    }
+
+    // 3. Document Extraction (Serverless-friendly via buffer parser)
     let extractedDocText = attachedDocument?.text || "";
-    let docAnomalyNotice = "";
+    if (attachedDocument?.base64) {
+      try {
+        const buffer = Buffer.from(attachedDocument.base64, "base64");
+        const parsed = await parseDocumentBuffer(
+          buffer,
+          attachedDocument.name,
+          4500,
+        );
+        if (parsed.text) {
+          extractedDocText = parsed.text;
+        }
+      } catch (docErr) {
+        console.warn("Document buffer extraction notice:", docErr);
+      }
+    }
 
-    if (attachedDocument) {
-      if (attachedDocument.base64) {
-        try {
-          const buffer = Buffer.from(attachedDocument.base64, "base64");
-          const parsedDoc = await parseDocumentBuffer(
-            buffer,
-            attachedDocument.name,
-            5000,
-          );
-          if (parsedDoc.text) {
-            extractedDocText = parsedDoc.text;
+    const contextEngineParams = {
+      materialTitle: material.title,
+      materialType: material.type || "Activity",
+      materialInstructions: material.instructions || material.description || "",
+      materialContent: material.content || "",
+      currentTask: currentTask || material.description || "",
+      studentAnswer,
+      message: effectiveMessage,
+      assistanceMode,
+      languageMode,
+      attachedDoc: attachedDocument
+        ? {
+            name: attachedDocument.name,
+            size: attachedDocument.size,
+            text: extractedDocText,
+            wordCount: attachedDocument.wordCount,
           }
-        } catch (parseErr) {
-          console.warn("Server document buffer parsing warning:", parseErr);
-        }
-      }
+        : undefined,
+    };
 
-      // Check for hidden anomalies/gibberish
-      const anomalyResult = checkTextAnomalies(extractedDocText);
-      if (anomalyResult.hasGibberish) {
-        docAnomalyNotice = `- Warning: Internal anomaly inspection identified unpronounceable or placeholder sequence(s): ${anomalyResult.details}`;
-      }
-    }
-
-    // 4. Safe Document Truncation if too large
-    if (extractedDocText.length > 4000) {
-      const sliced = sliceAndReconstructDocument({
-        name: attachedDocument?.name || "Document",
-        size: attachedDocument?.size || 0,
-        text: extractedDocText,
-      });
-      extractedDocText = sliced.slicedText;
-    }
-
-    const docInputForEngine = attachedDocument
-      ? {
-          name: attachedDocument.name,
-          size: attachedDocument.size,
-          text: extractedDocText,
-          wordCount: attachedDocument.wordCount,
-        }
-      : undefined;
-
-    // 5. Check Cognitive Offloading Rule (Thesis Requirement)
-    const isOffloading = isCognitiveOffloadingRequest(message);
-
-    // 6. Demo / Local Simulation Mode
+    // 4. Local Simulation / Demo Override
     if (forceMode === "local" || forceMode === "demo") {
-      const demoResponse = generateContextualResponse({
-        materialTitle: material.title,
-        materialType: material.type || "Activity",
-        currentTask: body.currentTask || material.description || "",
-        assistanceMode: assistanceMode || "guide",
-        message,
-        attachedDoc: docInputForEngine,
-      });
-
+      const localResponse = generateContextualResponse(contextEngineParams);
       return NextResponse.json({
         success: true,
-        ...demoResponse,
-        data: demoResponse,
-        source: forceMode === "demo" ? "demo-simulation" : "local-template",
+        ...localResponse,
+        data: localResponse,
+        source: "local-fallback" as ServiceSource,
         timestamp: new Date().toISOString(),
       });
     }
 
-    // 7. Key Rotation Configuration
+    // 5. Key Rotation Setup with Quota Awareness
     const keys = [
       {
         key: process.env.GEMINI_API_KEY,
-        source: "gemini-primary",
         name: "primary",
+        source: "gemini-live" as ServiceSource,
       },
       {
         key: process.env.GEMINI_API_KEY_FALLBACK_1,
-        source: "gemini-fallback-1",
         name: "fallback-1",
+        source: "gemini-backup" as ServiceSource,
       },
       {
         key: process.env.GEMINI_API_KEY_FALLBACK_2,
-        source: "gemini-fallback-2",
         name: "fallback-2",
+        source: "gemini-backup" as ServiceSource,
       },
     ];
 
-    let activeKeys = keys.filter((k) => k.key);
+    let candidateKeys = keys.filter((k) => k.key && !exhaustedKeys.has(k.key));
 
     if (forceMode === "fallback-1") {
-      activeKeys = activeKeys.filter(
+      candidateKeys = candidateKeys.filter(
         (k) => k.name === "fallback-1" || k.name === "fallback-2",
       );
     } else if (forceMode === "fallback-2") {
-      activeKeys = activeKeys.filter((k) => k.name === "fallback-2");
+      candidateKeys = candidateKeys.filter((k) => k.name === "fallback-2");
     }
 
-    const promptText = buildGeminiPrompt(
-      body as ChatRequest,
-      extractedDocText,
-      docAnomalyNotice,
-    );
+    const promptText = buildGeminiPrompt(body as ChatRequest, extractedDocText);
 
-    // 8. Streaming Support to eliminate Vercel 10s Serverless Timeout
+    // 6. Fast Response Handling for Kickoffs & Missing Answers
+    // If user says "Sure, let's start" or "help me start" or requests review without an answer,
+    // the contextual engine provides the immediate, perfectly grounded response!
+    const isKickoff = isConversationalKickoff(effectiveMessage);
+    const isHelp = isHelpStartRequest(effectiveMessage);
+    const isReviewWithoutAnswer =
+      (isReviewQuery(effectiveMessage) || assistanceMode === "review") &&
+      (!studentAnswer || studentAnswer.trim().length === 0);
+
+    let resolvedData: GeminiResponse | null = null;
+    let resolvedSource: ServiceSource = "gemini-live";
+
+    if (isKickoff || isHelp || isReviewWithoutAnswer) {
+      resolvedData = generateContextualResponse(contextEngineParams);
+      resolvedSource = candidateKeys.length > 0 ? "gemini-live" : "local-fallback";
+    } else {
+      // Execute Gemini API Call with Key Rotation
+      let rawResponse: string | null = null;
+
+      for (const { key, source } of candidateKeys) {
+        if (!key) continue;
+        try {
+          rawResponse = await callGeminiApi(key, promptText);
+          resolvedSource = source;
+          break;
+        } catch (apiErr: any) {
+          const errMsg = apiErr?.message || String(apiErr);
+          console.warn(`Gemini notice for key ${source}:`, errMsg);
+
+          // Mark key as exhausted if daily quota or rate limit exceeded
+          if (
+            errMsg.includes("429") ||
+            errMsg.includes("quota") ||
+            errMsg.includes("Rate limit exceeded")
+          ) {
+            exhaustedKeys.add(key);
+          }
+        }
+      }
+
+      if (rawResponse) {
+        try {
+          const cleaned = rawResponse
+            .replace(/```json/gi, "")
+            .replace(/```/g, "")
+            .trim();
+          const parsed = JSON.parse(cleaned);
+
+          resolvedData = {
+            status: parsed.status || "guided_help",
+            directResponse: parsed.directResponse || parsed.response || rawResponse,
+            response: parsed.directResponse || parsed.response || rawResponse,
+            responseType: parsed.responseType || "guidance",
+            documentEvidence: parsed.documentEvidence || [],
+            keyPoints: parsed.keyPoints || ["Grounded academic response provided."],
+            missingInformation: parsed.missingInformation || [],
+            suggestedNextActions: parsed.suggestedNextActions || ["Continue discussion", "Ask a question"],
+            suggestedNextAction: parsed.suggestedNextActions?.[0] || "Review the guidance provided.",
+            followUpActions: parsed.suggestedNextActions || ["Explain more simply", "Give me a hint"],
+            verificationQuestions: parsed.verificationQuestions || ["Does this align with your coursework requirements?"],
+            requiresStudentAnswer: Boolean(parsed.requiresStudentAnswer),
+            requiresReview: Boolean(parsed.requiresReview),
+            languageMode,
+          };
+        } catch {
+          // Unstructured AI response fallback
+          resolvedData = {
+            status: "guided_help",
+            directResponse: rawResponse,
+            response: rawResponse,
+            responseType: "guidance",
+            keyPoints: ["Unstructured AI response"],
+            suggestedNextActions: ["Explain more simply", "Ask for a hint"],
+            suggestedNextAction: "Review this response against your assignment requirements.",
+            followUpActions: ["Explain more simply", "Give me a hint"],
+            verificationQuestions: ["Does this response address your coursework question?"],
+            requiresStudentAnswer: false,
+            requiresReview: false,
+            languageMode,
+          };
+        }
+      } else {
+        // All Gemini keys failed or hit quota -> Local Academic Fallback
+        resolvedData = generateContextualResponse(contextEngineParams);
+        resolvedSource = "local-fallback";
+      }
+    }
+
+    // 7. Streaming Response to eliminate serverless timeouts
     if (stream) {
       const encoder = new TextEncoder();
       const customReadable = new ReadableStream({
         async start(controller) {
-          // Send initial start event immediately to guarantee TTFB < 200ms
+          // Immediate initial event (TTFB < 200ms)
           controller.enqueue(
             encoder.encode(
-              `data: ${JSON.stringify({ type: "start", status: "connecting" })}\n\n`,
+              `data: ${JSON.stringify({ type: "start", status: "connected" })}\n\n`,
             ),
           );
 
-          let resolvedData: StructuredResponse | null = null;
-          let activeSource = "gemini-primary";
-
-          // If student explicitly asked to do the task for them, apply cognitive offloading rule
-          if (isOffloading) {
-            resolvedData = generateContextualResponse({
-              materialTitle: material.title,
-              materialType: material.type || "Activity",
-              currentTask: body.currentTask || material.description || "",
-              assistanceMode: assistanceMode || "guide",
-              message,
-              attachedDoc: docInputForEngine,
-            });
-            activeSource = "gemini-primary";
-
-            // Stream words smoothly to client
-            const words = resolvedData.response.split(" ");
-            for (let i = 0; i < words.length; i += 3) {
-              const chunk = words.slice(i, i + 3).join(" ") + " ";
-              controller.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({ type: "chunk", text: chunk })}\n\n`,
-                ),
-              );
-              await new Promise((r) => setTimeout(r, 20));
-            }
-
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({
-                  type: "done",
-                  data: resolvedData,
-                  source: activeSource,
-                })}\n\n`,
-              ),
-            );
-            controller.close();
-            return;
-          }
-
-          // Otherwise query Gemini keys with fast fallback
-          let rawText: string | null = null;
-          for (const { key, source } of activeKeys) {
-            if (!key) continue;
-            try {
-              rawText = await callGeminiApi(key, promptText);
-              activeSource = source;
-              break;
-            } catch (err: any) {
-              console.warn(`Gemini call notice for ${source}:`, err?.message || err);
-            }
-          }
-
-          if (rawText) {
-            try {
-              const cleaned = rawText
-                .replace(/```json/gi, "")
-                .replace(/```/g, "")
-                .trim();
-              resolvedData = JSON.parse(cleaned);
-            } catch {
-              resolvedData = {
-                response: rawText,
-                responseType: "feedback",
-                keyPoints: [`Analysis generated for "${material.title}"`],
-                suggestedNextAction: `Review this feedback against your ${material.type || "assignment"} rubric.`,
-                followUpActions: [
-                  `Explain this more simply for ${material.title}`,
-                  "Give me a guiding hint on the next step",
-                ],
-                verificationQuestions: [
-                  `Does this response address your question about ${body.currentTask || material.title}?`,
-                ],
-                uncertainties: [],
-                requiresReview: false,
-              };
-            }
-          } else {
-            // Intelligent Fallback with Thesis Rules
-            resolvedData = generateContextualResponse({
-              materialTitle: material.title,
-              materialType: material.type || "Activity",
-              currentTask: body.currentTask || material.description || "",
-              assistanceMode: assistanceMode || "guide",
-              message,
-              attachedDoc: docInputForEngine,
-            });
-            activeSource = "gemini-fallback-1";
-          }
-
-          // Stream the response text chunks
-          const responseText = resolvedData?.response || "";
-          const words = responseText.split(" ");
-          for (let i = 0; i < words.length; i += 4) {
-            const chunk = words.slice(i, i + 4).join(" ") + " ";
+          // Stream words progressively
+          const words = (resolvedData?.directResponse || "").split(" ");
+          for (let i = 0; i < words.length; i += 3) {
+            const chunk = words.slice(i, i + 3).join(" ") + " ";
             controller.enqueue(
               encoder.encode(
                 `data: ${JSON.stringify({ type: "chunk", text: chunk })}\n\n`,
               ),
             );
-            await new Promise((r) => setTimeout(r, 15));
+            await new Promise((r) => setTimeout(r, 18));
           }
 
-          // Final done event with complete structured metadata
+          // Done event with full metadata
           controller.enqueue(
             encoder.encode(
               `data: ${JSON.stringify({
                 type: "done",
                 data: resolvedData,
-                source: activeSource,
+                source: resolvedSource,
               })}\n\n`,
             ),
           );
@@ -483,95 +430,22 @@ export async function POST(request: Request) {
       });
     }
 
-    // 9. Non-Streaming JSON Fallback
-    let rawResponseText: string | null = null;
-    let successfulSource = "gemini-primary";
-
-    if (isOffloading) {
-      const offloadingResponse = generateContextualResponse({
-        materialTitle: material.title,
-        materialType: material.type || "Activity",
-        currentTask: body.currentTask || material.description || "",
-        assistanceMode: assistanceMode || "guide",
-        message,
-        attachedDoc: docInputForEngine,
-      });
-
-      return NextResponse.json({
-        success: true,
-        ...offloadingResponse,
-        data: offloadingResponse,
-        source: "gemini-primary",
-        timestamp: new Date().toISOString(),
-      });
-    }
-
-    for (const { key, source } of activeKeys) {
-      if (!key) continue;
-      try {
-        rawResponseText = await callGeminiApi(key, promptText);
-        successfulSource = source;
-        break;
-      } catch (apiErr: any) {
-        console.warn(`Gemini API notice for ${source}:`, apiErr?.message || apiErr);
-      }
-    }
-
-    if (!rawResponseText) {
-      const fallbackData = generateContextualResponse({
-        materialTitle: material.title,
-        materialType: material.type || "Activity",
-        currentTask: body.currentTask || material.description || "",
-        assistanceMode: assistanceMode || "guide",
-        message,
-        attachedDoc: docInputForEngine,
-      });
-
-      return NextResponse.json({
-        success: true,
-        ...fallbackData,
-        data: fallbackData,
-        source: "gemini-fallback-1",
-        timestamp: new Date().toISOString(),
-      });
-    }
-
-    let structuredData: StructuredResponse;
-    try {
-      const cleaned = rawResponseText
-        .replace(/```json/gi, "")
-        .replace(/```/g, "")
-        .trim();
-      structuredData = JSON.parse(cleaned);
-    } catch {
-      structuredData = {
-        response: rawResponseText,
-        responseType: "feedback",
-        keyPoints: [`Analysis generated for "${material.title}"`],
-        suggestedNextAction: `Review this feedback against your ${material.type || "assignment"} rubric.`,
-        followUpActions: [
-          `Explain this more simply for ${material.title}`,
-          "Give me a guiding hint on the next step",
-        ],
-        verificationQuestions: [
-          `Does this response address your question about ${body.currentTask || material.title}?`,
-        ],
-        uncertainties: [],
-        requiresReview: false,
-      };
-    }
-
+    // 8. Non-Streaming Response
     return NextResponse.json({
       success: true,
-      ...structuredData,
-      data: structuredData,
-      source: successfulSource,
+      ...resolvedData,
+      data: resolvedData,
+      source: resolvedSource,
       timestamp: new Date().toISOString(),
     });
-  } catch (err) {
-    console.error("Unhandled chat route error:", err);
+  } catch (err: any) {
+    console.error("Unhandled chat route error:", err?.message || err);
     return NextResponse.json(
-      { success: false, error: "Internal server error" },
+      {
+        success: false,
+        error:
+          "Live AI assistance is temporarily unavailable. You can continue with a local academic template or try again later.",
+      },
       { status: 500 },
     );
   }

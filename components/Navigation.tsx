@@ -4,11 +4,11 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { usePrototype } from "@/lib/prototype-context";
-import { Bot, GraduationCap, Menu, X, Sparkles } from "lucide-react";
+import { Bot, GraduationCap, Menu, X, Sparkles, Languages } from "lucide-react";
 
 export default function Navigation() {
   const pathname = usePathname();
-  const { settings, isMounted } = usePrototype();
+  const { settings, isMounted, languageMode, setLanguageMode } = usePrototype();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const navLinks = [
@@ -52,11 +52,11 @@ export default function Navigation() {
   return (
     <nav
       suppressHydrationWarning
-      className="sticky top-0 z-50 w-full backdrop-blur-md bg-white/80 dark:bg-slate-900/80 border-b border-gray-200 dark:border-slate-800 shadow-sm transition-colors duration-300"
+      className="sticky top-0 z-50 w-full backdrop-blur-md bg-white/85 dark:bg-slate-900/85 border-b border-gray-200 dark:border-slate-800 shadow-sm transition-colors duration-300"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
-          <div className="flex">
+          <div className="flex items-center">
             <div className="flex-shrink-0 flex items-center gap-2.5">
               <Link
                 href="/dashboard"
@@ -74,7 +74,7 @@ export default function Navigation() {
                 aria-label={getStatusTitle()}
               />
             </div>
-            <div className="hidden sm:ml-8 sm:flex sm:space-x-8">
+            <div className="hidden md:ml-8 md:flex md:space-x-6">
               {navLinks.map((link) => {
                 const isActive = checkIsActive(link.href);
                 return (
@@ -101,7 +101,46 @@ export default function Navigation() {
             </div>
           </div>
 
-          <div className="hidden sm:flex sm:items-center sm:gap-3">
+          <div className="hidden sm:flex sm:items-center sm:gap-4">
+            {/* Language Selector Header */}
+            <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
+              <Languages className="w-3.5 h-3.5 text-slate-500 ml-1" />
+              <button
+                type="button"
+                onClick={() => setLanguageMode("english")}
+                className={`px-2 py-0.5 rounded font-medium transition-colors ${
+                  languageMode === "english"
+                    ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs font-semibold"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                }`}
+              >
+                English
+              </button>
+              <button
+                type="button"
+                onClick={() => setLanguageMode("filipino")}
+                className={`px-2 py-0.5 rounded font-medium transition-colors ${
+                  languageMode === "filipino"
+                    ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs font-semibold"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                }`}
+              >
+                Filipino
+              </button>
+              <button
+                type="button"
+                onClick={() => setLanguageMode("taglish")}
+                title="Taglish — Tagalog-English code-switching"
+                className={`px-2 py-0.5 rounded font-medium transition-colors ${
+                  languageMode === "taglish"
+                    ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs font-semibold"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                }`}
+              >
+                Taglish
+              </button>
+            </div>
+
             <Link
               href="/chat"
               className="inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition-all hover:shadow"
@@ -131,8 +170,8 @@ export default function Navigation() {
 
       {/* Mobile menu */}
       {isMobileMenuOpen && (
-        <div className="sm:hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-gray-200 dark:border-slate-800">
-          <div className="pt-2 pb-3 space-y-1">
+        <div className="sm:hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-gray-200 dark:border-slate-800 p-4 space-y-3">
+          <div className="space-y-1">
             {navLinks.map((link) => {
               const isActive = checkIsActive(link.href);
               return (
@@ -140,9 +179,9 @@ export default function Navigation() {
                   key={link.href}
                   href={link.href}
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className={`block pl-3 pr-4 py-2 border-l-4 text-base font-medium ${
+                  className={`block pl-3 pr-4 py-2 border-l-4 text-base font-medium rounded-r-md ${
                     isActive
-                      ? "bg-indigo-50 dark:bg-indigo-950/50 border-indigo-600 text-indigo-600 dark:text-indigo-400"
+                      ? "bg-indigo-50 dark:bg-indigo-950/50 border-indigo-600 text-indigo-600 dark:text-indigo-400 font-semibold"
                       : "border-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 hover:border-gray-300 hover:text-gray-900 dark:hover:text-white"
                   }`}
                 >
@@ -150,6 +189,51 @@ export default function Navigation() {
                 </Link>
               );
             })}
+          </div>
+
+          <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
+            <label className="text-xs font-semibold text-slate-500 block mb-1.5">
+              Language Style:
+            </label>
+            <div className="grid grid-cols-3 gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg text-xs">
+              <button
+                type="button"
+                onClick={() => setLanguageMode("english")}
+                className={`py-1 rounded font-medium text-center ${
+                  languageMode === "english"
+                    ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs font-semibold"
+                    : "text-slate-600 dark:text-slate-400"
+                }`}
+              >
+                English
+              </button>
+              <button
+                type="button"
+                onClick={() => setLanguageMode("filipino")}
+                className={`py-1 rounded font-medium text-center ${
+                  languageMode === "filipino"
+                    ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs font-semibold"
+                    : "text-slate-600 dark:text-slate-400"
+                }`}
+              >
+                Filipino
+              </button>
+              <button
+                type="button"
+                onClick={() => setLanguageMode("taglish")}
+                className={`py-1 rounded font-medium text-center ${
+                  languageMode === "taglish"
+                    ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs font-semibold"
+                    : "text-slate-600 dark:text-slate-400"
+                }`}
+              >
+                Taglish
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Taglish — Tagalog-English code-switching for Filipino university
+              students.
+            </p>
           </div>
         </div>
       )}

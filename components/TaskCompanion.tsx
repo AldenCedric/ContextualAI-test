@@ -2,18 +2,23 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { mockMaterials as MATERIALS, SUGGESTED_PROMPTS } from "@/lib/mock-data";
+import {
+  mockMaterials as MATERIALS,
+  SUGGESTED_PROMPTS,
+  ASSISTANCE_MODES,
+} from "@/lib/mock-data";
 import {
   AssistanceMode,
   ChatMessage,
   ChatResponseData,
   SavedResponse,
   Material,
+  ServiceSource,
 } from "@/lib/types";
 import { classNames, generateId } from "@/lib/utils";
-import { GEMINI_MODEL_LABEL } from "@/lib/constants";
 import { usePrototype } from "@/lib/prototype-context";
 import { parseAcademicDocument, ParsedDocument } from "@/lib/document-parser";
+import { DOCUMENT_READABLE_NOTICE } from "@/lib/contextual-engine";
 import {
   Bot,
   Sparkles,
@@ -24,31 +29,36 @@ import {
   CheckCircle2,
   FileEdit,
   FileText,
-  Paperclip,
   Receipt,
-  X,
   Send,
   AlertTriangle,
   ArrowRight,
   HelpCircle,
   Target,
-  FileCheck,
   RotateCcw,
-  RefreshCw,
+  BookOpen,
+  Info,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 interface TaskCompanionProps {
   initialMaterialId?: string;
   initialMode?: AssistanceMode;
+  initialStudentAnswer?: string;
 }
 
 const DEFAULT_ANY_MATERIAL: Material = {
   id: "any",
-  title: "Any Material / Custom Upload",
+  title: "Any Academic Material / Custom Upload",
   type: "Activity",
   description:
-    "Provide any subject, topic, worksheet, or upload an academic document (PDF, TXT, DOCX) for live verification and assistance.",
-  currentTask: "Review provided academic material and analyze key concepts.",
+    "Provide any subject, worksheet, problem set, or upload an academic document for contextual guidance and review.",
+  instructions:
+    "General Academic Instructions:\n1. Clearly state your core learning objective.\n2. Review instructions and identify questions.\n3. Formulate your answer in your own words before requesting review.",
+  content:
+    "General Course Content: StudyFlow provides contextual academic scaffolding to university students across activities, handouts, problem sets, reflection papers, and presentations.",
+  currentTask: "Review the material instructions and begin with Step 1.",
   progress: 0,
   status: "in-progress",
 };
@@ -56,23 +66,23 @@ const DEFAULT_ANY_MATERIAL: Material = {
 export default function TaskCompanion({
   initialMaterialId,
   initialMode = "guide",
+  initialStudentAnswer = "",
 }: TaskCompanionProps) {
-  const { serviceMode, showReviewCheckpoint } = usePrototype();
+  const {
+    serviceMode,
+    showReviewCheckpoint,
+    showDocumentEvidence,
+    languageMode,
+    setLanguageMode,
+  } = usePrototype();
 
-  // Selected Material: default to 'any' if not specified, or the passed ID
   const [selectedMaterialId, setSelectedMaterialId] = useState<string>(
-    initialMaterialId || "any",
+    initialMaterialId || "photosynthesis-activity",
   );
-
-  // Custom subject/title when 'any' is selected
-  const [customSubjectTitle, setCustomSubjectTitle] = useState<string>("");
 
   const selectedMaterial: Material =
     selectedMaterialId === "any"
-      ? {
-          ...DEFAULT_ANY_MATERIAL,
-          title: customSubjectTitle.trim() || "Any Material / Custom Upload",
-        }
+      ? DEFAULT_ANY_MATERIAL
       : MATERIALS.find((m) => m.id === selectedMaterialId) ||
         DEFAULT_ANY_MATERIAL;
 
@@ -83,9 +93,14 @@ export default function TaskCompanion({
   const [isCooldown, setIsCooldown] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Student Draft Answer state
+  const [studentAnswer, setStudentAnswer] = useState(initialStudentAnswer);
+  const [showAnswerDrawer, setShowAnswerDrawer] = useState(
+    Boolean(initialStudentAnswer),
+  );
+
   // Attached Document State
   const [attachedDoc, setAttachedDoc] = useState<ParsedDocument | null>(null);
-  const [isParsingDoc, setIsParsingDoc] = useState(false);
 
   // Modals
   const [showReviewModal, setShowReviewModal] = useState<{
@@ -130,7 +145,7 @@ export default function TaskCompanion({
           JSON.stringify(messages),
         );
       } catch {
-        // ignore
+        // storage quota full
       }
     }
   }, [messages, selectedMaterial.id]);
@@ -141,76 +156,68 @@ export default function TaskCompanion({
   }, [messages, isTyping]);
 
   const suggestedPrompts =
-    selectedMaterial.id === "any"
-      ? [
-          "Verify this document for gibberish, hallucinated text, or unrelated topics.",
-          "Review the main arguments and academic structure of this material.",
-          "Explain the core concepts and methodologies used in this topic.",
-          "Break this assignment into a manageable step-by-step checklist.",
-        ]
-      : SUGGESTED_PROMPTS[selectedMaterial.type] ||
-        SUGGESTED_PROMPTS["Activity"] ||
-        [];
+    SUGGESTED_PROMPTS[selectedMaterial.type] ||
+    SUGGESTED_PROMPTS["Activity"] ||
+    [];
 
-  const getStatusColor = () => {
-    switch (serviceMode) {
-      case "primary":
-        return "bg-green-500";
-      case "demo":
-        return "bg-indigo-500";
-      case "fallback-1":
-      case "fallback-2":
-        return "bg-yellow-500";
-      case "local":
-        return "bg-red-500";
+  const getSourceBadge = (source?: ServiceSource) => {
+    switch (source) {
+      case "gemini-live":
+      case "gemini-primary":
+        return {
+          label: "Gemini Live",
+          color:
+            "bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
+        };
+      case "gemini-backup":
+      case "gemini-fallback-1":
+      case "gemini-fallback-2":
+        return {
+          label: "Gemini Backup",
+          color:
+            "bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800",
+        };
+      case "local-fallback":
+      case "local-template":
       default:
-        return "bg-green-500";
+        return {
+          label: "Local Fallback Template",
+          color:
+            "bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800",
+        };
     }
   };
 
-  const getStatusLabel = () => {
-    switch (serviceMode) {
-      case "primary":
-        return "Gemini Live";
-      case "demo":
-        return "Demo Simulation";
-      case "fallback-1":
-      case "fallback-2":
-        return "Backup Service";
-      case "local":
-        return "Local Fallback";
-      default:
-        return "Gemini";
-    }
-  };
-
-  // Handle File Upload (PDF, TXT, DOCX)
+  // Handle Document Upload
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setIsParsingDoc(true);
     setError(null);
     try {
       const parsed = await parseAcademicDocument(file);
       setAttachedDoc(parsed);
 
-      // If 'any' is selected and user hasn't typed a title, auto-populate title from file name
-      if (selectedMaterialId === "any" && !customSubjectTitle) {
-        setCustomSubjectTitle(file.name.replace(/\.[^/.]+$/, ""));
-      }
-
-      // Auto-switch to Review mode for checking documents
-      if (mode === "guide" || mode === "explain") {
-        setMode("review");
-      }
+      // Add notification system message in the chat
+      const uploadNoticeMsg: ChatMessage = {
+        id: generateId(),
+        role: "assistant",
+        content: `${DOCUMENT_READABLE_NOTICE}\n\nDocument attached: **${parsed.name}** (${(parsed.size / 1024).toFixed(1)} KB, ~${parsed.wordCount || 100} words).`,
+        timestamp: new Date().toISOString(),
+        source: "local-fallback",
+        attachedDocument: {
+          name: parsed.name,
+          size: parsed.size,
+          wordCount: parsed.wordCount,
+        },
+      };
+      setMessages((prev) => [...prev, uploadNoticeMsg]);
     } catch (err) {
       console.error("File parsing error", err);
       setError(
-        "Failed to extract text from file. You can still paste the text directly into the chat.",
+        "Failed to extract text from file. You can still paste text directly.",
       );
     } finally {
-      setIsParsingDoc(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
@@ -218,20 +225,25 @@ export default function TaskCompanion({
   const handleSendMessage = async (customText?: string) => {
     if (isCooldown || isTyping) return;
     const messageToSend = customText || input;
-    if (!messageToSend.trim() && !attachedDoc) return;
+    if (!messageToSend.trim() && !attachedDoc && !studentAnswer.trim()) return;
 
-    // Snapshot current attached document for this message
     const docToSend = attachedDoc;
+    const answerToSend = studentAnswer.trim() || undefined;
 
     const userDisplayText = messageToSend.trim()
       ? messageToSend
-      : `Please review and verify attached document: ${docToSend?.name}`;
+      : answerToSend
+        ? "Please review my submitted draft answer against the material instructions."
+        : `Please guide me on the attached document: ${docToSend?.name}`;
 
     const newUserMessage: ChatMessage = {
       id: generateId(),
       role: "user",
       content: userDisplayText,
       timestamp: new Date().toISOString(),
+      assistanceMode: mode,
+      languageMode,
+      studentAnswer: answerToSend,
       attachedDocument: docToSend
         ? {
             name: docToSend.name,
@@ -243,46 +255,13 @@ export default function TaskCompanion({
 
     setMessages((prev) => [...prev, newUserMessage]);
     setInput("");
-    setAttachedDoc(null); // Clear from staging area so it visibly attaches to the sent message
+    setAttachedDoc(null);
     setIsTyping(true);
     setIsCooldown(true);
     setError(null);
 
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
-    }
-
-    // 1. Quota Guard: Check client query cache for identical repeated queries
-    const cacheKey = `studyflow-qc-${selectedMaterial.id}-${mode}-${userDisplayText
-      .trim()
-      .toLowerCase()
-      .slice(0, 80)
-      .replace(/[^a-z0-9]/g, "")}-${docToSend ? docToSend.name : "nodoc"}`;
-
-    if (serviceMode !== "local") {
-      try {
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) {
-          const cachedData = JSON.parse(cached);
-          const cachedAssistantMessage: ChatMessage = {
-            id: generateId(),
-            role: "assistant",
-            content: cachedData.response || "",
-            timestamp: new Date().toISOString(),
-            assistanceMode: mode,
-            source: cachedData.source || "gemini-primary",
-            responseData: cachedData,
-          };
-          setTimeout(() => {
-            setMessages((prev) => [...prev, cachedAssistantMessage]);
-            setIsTyping(false);
-            setTimeout(() => setIsCooldown(false), 1200);
-          }, 350);
-          return;
-        }
-      } catch {
-        // Cache miss: proceed to fetch
-      }
     }
 
     const conversationHistory = messages.slice(-6).map((m) => ({
@@ -302,12 +281,16 @@ export default function TaskCompanion({
             id: selectedMaterial.id,
             title: selectedMaterial.title,
             type: selectedMaterial.type,
+            instructions: selectedMaterial.instructions,
+            content: selectedMaterial.content,
             description: selectedMaterial.description,
           },
           currentTask: selectedMaterial.currentTask || "",
+          studentAnswer: answerToSend || null,
+          userMessage: userDisplayText,
           assistanceMode: mode,
+          languageMode,
           conversationHistory,
-          message: userDisplayText,
           stream: true,
           attachedDocument: docToSend
             ? {
@@ -323,31 +306,32 @@ export default function TaskCompanion({
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch response: ${response.status}`);
+        throw new Error(`Service returned HTTP ${response.status}`);
       }
 
       const contentType = response.headers.get("content-type") || "";
 
       if (contentType.includes("text/event-stream")) {
         const reader = response.body?.getReader();
-        if (!reader) throw new Error("No readable stream available");
+        if (!reader) throw new Error("No readable stream");
 
         const decoder = new TextDecoder("utf-8");
         let buffer = "";
         const accumulatedText = { current: "" };
         let finalStructuredData: ChatResponseData | null = null;
-        let responseSource = "gemini-primary";
+        let responseSource: ServiceSource = "gemini-live";
 
-        const assistantMessageId = generateId();
+        const assistantMsgId = generateId();
         setMessages((prev) => [
           ...prev,
           {
-            id: assistantMessageId,
+            id: assistantMsgId,
             role: "assistant",
             content: "",
             timestamp: new Date().toISOString(),
             assistanceMode: mode,
-            source: "gemini-primary",
+            languageMode,
+            source: "gemini-live",
           },
         ]);
         setIsTyping(false);
@@ -373,7 +357,7 @@ export default function TaskCompanion({
                 const textSnapshot = accumulatedText.current;
                 setMessages((prev) =>
                   prev.map((m) =>
-                    m.id === assistantMessageId
+                    m.id === assistantMsgId
                       ? { ...m, content: textSnapshot }
                       : m,
                   ),
@@ -391,67 +375,51 @@ export default function TaskCompanion({
         }
 
         const finalText =
-          finalStructuredData?.response || accumulatedText.current;
+          finalStructuredData?.directResponse ||
+          finalStructuredData?.response ||
+          accumulatedText.current;
 
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantMessageId
+            m.id === assistantMsgId
               ? {
                   ...m,
                   content: finalText,
-                  source: responseSource as any,
+                  source: responseSource,
                   responseData: finalStructuredData || undefined,
                 }
               : m,
           ),
         );
-
-        if (finalStructuredData) {
-          try {
-            localStorage.setItem(
-              cacheKey,
-              JSON.stringify({
-                ...finalStructuredData,
-                source: responseSource,
-              }),
-            );
-          } catch {
-            // cache quota full
-          }
-        }
       } else {
         const data = await response.json();
-        const structured = data.data || data;
+        const structured: ChatResponseData = data.data || data;
 
         const newAssistantMessage: ChatMessage = {
           id: generateId(),
           role: "assistant",
-          content: structured.response || data.response || "",
+          content:
+            structured.directResponse ||
+            structured.response ||
+            data.response ||
+            "",
           timestamp: new Date().toISOString(),
           assistanceMode: mode,
-          source: data.source || "gemini-primary",
+          languageMode,
+          source: data.source || "gemini-live",
           responseData: structured,
         };
 
         setMessages((prev) => [...prev, newAssistantMessage]);
-
-        try {
-          localStorage.setItem(
-            cacheKey,
-            JSON.stringify({ ...structured, source: data.source }),
-          );
-        } catch {
-          // storage quota full
-        }
       }
     } catch (err: unknown) {
       console.error("Chat error:", err);
       setError(
-        "An error occurred while generating the response. Please try again or switch to local template.",
+        "Live AI assistance is temporarily unavailable. You can continue with a local academic template or try again later.",
       );
     } finally {
       setIsTyping(false);
-      setTimeout(() => setIsCooldown(false), 1200);
+      setTimeout(() => setIsCooldown(false), 800);
     }
   };
 
@@ -463,21 +431,14 @@ export default function TaskCompanion({
   };
 
   const clearChat = () => {
-    if (confirm("Clear the conversation for this material?")) {
+    if (confirm("Clear conversation history for this material?")) {
       setMessages([]);
       localStorage.removeItem(`studyflow-chat-${selectedMaterial.id}`);
     }
   };
 
   const initiateSave = (messageId: string, response: ChatResponseData) => {
-    const isLongExplanation =
-      response.responseType === "explanation" && response.response.length > 500;
-    if (
-      showReviewCheckpoint &&
-      (mode === "draft" ||
-        response.responseType === "checklist" ||
-        isLongExplanation)
-    ) {
+    if (showReviewCheckpoint) {
       setShowReviewModal({ messageId, response });
       setReviewAnswers({ mainIdea: "", whatToVerify: "", ownWords: "" });
     } else {
@@ -495,7 +456,7 @@ export default function TaskCompanion({
     const userMessageContent =
       msgIndex > 0 && messages[msgIndex - 1]?.role === "user"
         ? messages[msgIndex - 1].content
-        : input || "AI Interaction";
+        : input || "Academic Inquiry";
 
     const saved: SavedResponse = {
       id: generateId(),
@@ -504,10 +465,12 @@ export default function TaskCompanion({
       materialType: selectedMaterial.type,
       currentTask: selectedMaterial.currentTask || "",
       assistanceMode: mode,
+      languageMode,
       userMessage: userMessageContent,
+      studentAnswer: studentAnswer.trim() || undefined,
       responseData: response,
       savedAt: new Date().toISOString(),
-      source: message?.source || "gemini-primary",
+      source: message?.source || "gemini-live",
       reviewAnswers: review || undefined,
     };
 
@@ -519,7 +482,7 @@ export default function TaskCompanion({
         JSON.stringify([saved, ...parsed]),
       );
     } catch {
-      // ignore
+      // storage quota full
     }
 
     setShowReviewModal(null);
@@ -535,28 +498,19 @@ export default function TaskCompanion({
             <Bot className="w-5 h-5" />
           </div>
           <div className="flex-1 sm:flex-none">
-            <div className="flex items-center gap-2">
-              <label
-                htmlFor="material-select"
-                className="text-xs font-bold text-slate-500 uppercase tracking-wider"
-              >
-                Material Context:
-              </label>
-            </div>
+            <label
+              htmlFor="material-select"
+              className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block"
+            >
+              Academic Material Context:
+            </label>
             <select
               id="material-select"
               value={selectedMaterialId}
-              onChange={(e) => {
-                setSelectedMaterialId(e.target.value);
-                if (e.target.value !== "any") {
-                  setCustomSubjectTitle("");
-                }
-              }}
-              className="mt-0.5 text-sm font-semibold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 shadow-sm"
+              onChange={(e) => setSelectedMaterialId(e.target.value)}
+              className="mt-0.5 text-sm font-semibold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 shadow-sm max-w-[280px] sm:max-w-md truncate"
             >
-              <option value="any">
-                Any Material / Custom Upload (Live Gemini)
-              </option>
+              <option value="any">Any Academic Material / Custom Upload</option>
               {MATERIALS.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.title} ({m.type})
@@ -566,11 +520,47 @@ export default function TaskCompanion({
           </div>
         </div>
 
-        <div className="flex items-center gap-3 self-end sm:self-center">
-          {/* Status Indicator */}
-          <div className="flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-            <span className={`w-2 h-2 rounded-full ${getStatusColor()}`} />
-            <span>{getStatusLabel()}</span>
+        {/* Language & Actions */}
+        <div className="flex flex-wrap items-center gap-2.5 self-end sm:self-center">
+          {/* Visible Language Selector */}
+          <div className="flex items-center gap-1 bg-white dark:bg-slate-800 p-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">
+              Lang:
+            </span>
+            <button
+              type="button"
+              onClick={() => setLanguageMode("english")}
+              className={`px-2 py-0.5 rounded font-medium transition-colors ${
+                languageMode === "english"
+                  ? "bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-bold"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+              }`}
+            >
+              English
+            </button>
+            <button
+              type="button"
+              onClick={() => setLanguageMode("filipino")}
+              className={`px-2 py-0.5 rounded font-medium transition-colors ${
+                languageMode === "filipino"
+                  ? "bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-bold"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+              }`}
+            >
+              Filipino
+            </button>
+            <button
+              type="button"
+              onClick={() => setLanguageMode("taglish")}
+              title="Taglish — Tagalog-English code-switching"
+              className={`px-2 py-0.5 rounded font-medium transition-colors ${
+                languageMode === "taglish"
+                  ? "bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-bold"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+              }`}
+            >
+              Taglish
+            </button>
           </div>
 
           <button
@@ -594,45 +584,83 @@ export default function TaskCompanion({
         </div>
       </div>
 
-      {/* Dynamic Subject / Material Banner for 'any' mode */}
-      {selectedMaterialId === "any" ? (
-        <div className="px-4 py-2.5 bg-indigo-50/80 dark:bg-indigo-950/50 border-b border-indigo-100 dark:border-indigo-900/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
-          <div className="flex items-center gap-2 flex-1 w-full sm:w-auto">
-            <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400 flex-shrink-0" />
-            <input
-              type="text"
-              value={customSubjectTitle}
-              onChange={(e) => setCustomSubjectTitle(e.target.value)}
-              placeholder="Enter subject name (e.g. Organic Chemistry, Macroeconomics Assignment, or attach file below)..."
-              className="w-full sm:max-w-md px-2.5 py-1 text-xs bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-md focus:ring-1 focus:ring-indigo-500 font-medium text-slate-800 dark:text-slate-200"
-            />
-          </div>
-          <span className="text-[11px] text-indigo-700 dark:text-indigo-300 font-medium flex items-center gap-1">
-            <FileCheck className="w-3.5 h-3.5" />
-            Live Analysis Mode
+      {/* Target Task & Material Overview Banner */}
+      <div className="px-4 py-2 bg-indigo-50/70 dark:bg-indigo-950/40 border-b border-indigo-100 dark:border-indigo-900/50 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="flex items-center gap-2 truncate">
+          <Target className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 flex-shrink-0" />
+          <span className="font-semibold text-indigo-800 dark:text-indigo-300">
+            Target Task:
+          </span>
+          <span className="text-indigo-700 dark:text-indigo-200 truncate max-w-xs sm:max-w-md">
+            {selectedMaterial.currentTask || selectedMaterial.description}
           </span>
         </div>
-      ) : (
-        <div className="px-4 py-2 bg-indigo-50/70 dark:bg-indigo-950/40 border-b border-indigo-100 dark:border-indigo-900/50 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2 truncate">
-            <Target className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 flex-shrink-0" />
-            <span className="font-semibold text-indigo-800 dark:text-indigo-300">
-              Target Task:
+
+        <button
+          type="button"
+          onClick={() => setShowAnswerDrawer(!showAnswerDrawer)}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium text-xs transition-colors ${
+            studentAnswer.trim()
+              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300"
+              : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-indigo-300"
+          }`}
+        >
+          <FileText className="w-3.5 h-3.5" />
+          <span>
+            {studentAnswer.trim()
+              ? "My Draft Answer (Attached)"
+              : "Attach My Draft Answer"}
+          </span>
+          {showAnswerDrawer ? (
+            <ChevronUp className="w-3 h-3" />
+          ) : (
+            <ChevronDown className="w-3 h-3" />
+          )}
+        </button>
+      </div>
+
+      {/* Expandable Student Answer Drawer */}
+      {showAnswerDrawer && (
+        <div className="px-4 py-3 bg-slate-50 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 text-xs space-y-2">
+          <div className="flex justify-between items-center">
+            <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+              <FileEdit className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Student Draft / Answer Field (Separate from Chat):</span>
             </span>
-            <span className="text-indigo-700 dark:text-indigo-200 truncate">
-              {selectedMaterial.currentTask || selectedMaterial.description}
+            <span className="text-[11px] text-slate-500">
+              {studentAnswer.trim().split(/\s+/).filter(Boolean).length} words
             </span>
           </div>
-          <span className="hidden md:inline text-indigo-600 dark:text-indigo-400 font-medium">
-            Contextually Grounded
-          </span>
+          <textarea
+            value={studentAnswer}
+            onChange={(e) => setStudentAnswer(e.target.value)}
+            placeholder="Type or paste your actual answer, essay paragraph, or problem calculation here. When you ask the AI to review, it will assess this text directly against the assignment rubric."
+            rows={3}
+            className="w-full p-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+          />
+          <div className="flex items-center justify-between text-[11px] text-slate-500">
+            <span>
+              {studentAnswer.trim()
+                ? "Your draft will be submitted for review on your next request."
+                : "No answer submitted yet. Casual chat messages will not be judged as your answer."}
+            </span>
+            {studentAnswer.trim() && (
+              <button
+                type="button"
+                onClick={() => setStudentAnswer("")}
+                className="text-red-500 hover:underline"
+              >
+                Clear draft
+              </button>
+            )}
+          </div>
         </div>
       )}
 
       {/* Chat Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 bg-slate-50/50 dark:bg-slate-900/50">
         {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center min-h-[360px] text-center max-w-lg mx-auto py-8">
+          <div className="flex flex-col items-center justify-center min-h-[340px] text-center max-w-lg mx-auto py-8">
             <div className="w-14 h-14 rounded-2xl bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mb-4 shadow-sm">
               <Bot className="w-7 h-7" />
             </div>
@@ -640,17 +668,17 @@ export default function TaskCompanion({
               Task Companion Ready
             </h3>
             <p className="text-sm text-slate-600 dark:text-slate-300 mb-6">
-              Ask questions about{" "}
+              Working with{" "}
               <span className="font-semibold text-indigo-600 dark:text-indigo-400">
                 {selectedMaterial.title}
               </span>
-              , or attach a document (PDF, TXT, DOCX) to review and verify.
+              . Select a mode or choose a prompt to begin:
             </p>
 
             <div className="w-full space-y-2 text-left">
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                 <Lightbulb className="w-3.5 h-3.5 text-indigo-500" />
-                <span>Recommended Prompts:</span>
+                <span>Suggested Prompts for this {selectedMaterial.type}:</span>
               </p>
               {suggestedPrompts.slice(0, 4).map((prompt, i) => (
                 <button
@@ -667,161 +695,195 @@ export default function TaskCompanion({
             </div>
           </div>
         ) : (
-          messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={classNames(
-                "flex animate-slide-up",
-                msg.role === "user" ? "justify-end" : "justify-start",
-              )}
-            >
-              {msg.role === "user" ? (
-                <div className="bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-5 py-3 max-w-[85%] sm:max-w-[75%] shadow-sm space-y-2">
-                  {msg.attachedDocument && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-700/80 border border-indigo-400/40 rounded-lg text-xs w-fit">
-                      <FileText className="w-4 h-4 text-indigo-200 flex-shrink-0" />
-                      <span className="font-semibold truncate max-w-[180px] sm:max-w-[280px]">
-                        {msg.attachedDocument.name}
-                      </span>
-                      <span className="text-indigo-200 text-[10px] whitespace-nowrap">
-                        ({(msg.attachedDocument.size / 1024).toFixed(1)} KB)
-                      </span>
-                    </div>
-                  )}
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                    {msg.content}
-                  </p>
-                </div>
-              ) : (
-                <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm px-5 py-4 max-w-[95%] sm:max-w-[85%] shadow-sm space-y-3.5">
-                  {/* Metadata Header Badge */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="px-2.5 py-0.5 text-[10px] uppercase tracking-wider font-bold bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 rounded-md border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
-                      <Bot className="w-3 h-3" />
-                      AI • {msg.assistanceMode || "response"}
-                    </span>
-
-                    {msg.source === "local-template" && (
-                      <span className="px-2.5 py-0.5 text-[10px] uppercase tracking-wider font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 rounded-md border border-amber-200 dark:border-amber-800">
-                        Offline Template
-                      </span>
-                    )}
-                    {(msg.source === "gemini-fallback-1" ||
-                      msg.source === "gemini-fallback-2") && (
-                      <span className="px-2.5 py-0.5 text-[10px] uppercase tracking-wider font-bold bg-yellow-100 dark:bg-yellow-950 text-yellow-800 dark:text-yellow-300 rounded-md border border-yellow-200 dark:border-yellow-800">
-                        Backup AI Service
-                      </span>
-                    )}
-                    {msg.source === "demo-simulation" && (
-                      <span className="px-2.5 py-0.5 text-[10px] uppercase tracking-wider font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 rounded-md border border-indigo-200 dark:border-indigo-800">
-                        Demo Simulation
-                      </span>
-                    )}
-                    {msg.source === "gemini-primary" && (
-                      <span className="px-2.5 py-0.5 text-[10px] uppercase tracking-wider font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 rounded-md border border-emerald-200 dark:border-emerald-800">
-                        Gemini Live
-                      </span>
-                    )}
-
-                    {msg.responseData?.requiresReview && (
-                      <span className="px-2.5 py-0.5 text-[10px] uppercase tracking-wider font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 rounded-md border border-amber-200 dark:border-amber-800 flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3" />
-                        Requires Review
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Main Response Text */}
-                  <div className="prose prose-sm dark:prose-invert max-w-none text-slate-800 dark:text-slate-100 leading-relaxed text-sm">
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
-                  </div>
-
-                  {/* Key Points - Compact & Integrated */}
-                  {msg.responseData?.keyPoints &&
-                    msg.responseData.keyPoints.length > 0 && (
-                      <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60 space-y-1">
-                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                          <span>Key Takeaways</span>
-                        </p>
-                        <ul className="space-y-1 pl-1">
-                          {msg.responseData.keyPoints.map(
-                            (point: string, i: number) => (
-                              <li
-                                key={i}
-                                className="text-xs text-slate-700 dark:text-slate-300 flex items-start gap-2"
-                              >
-                                <span className="text-indigo-500 font-bold">
-                                  •
-                                </span>
-                                <span>{point}</span>
-                              </li>
-                            ),
-                          )}
-                        </ul>
+          messages.map((msg) => {
+            const badge = getSourceBadge(msg.source);
+            return (
+              <div
+                key={msg.id}
+                className={classNames(
+                  "flex animate-slide-up",
+                  msg.role === "user" ? "justify-end" : "justify-start",
+                )}
+              >
+                {msg.role === "user" ? (
+                  <div className="bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-5 py-3 max-w-[85%] sm:max-w-[75%] shadow-sm space-y-2">
+                    {msg.attachedDocument && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-700/80 border border-indigo-400/40 rounded-lg text-xs w-fit">
+                        <FileText className="w-4 h-4 text-indigo-200 flex-shrink-0" />
+                        <span className="font-semibold truncate max-w-[180px] sm:max-w-[280px]">
+                          {msg.attachedDocument.name}
+                        </span>
+                        <span className="text-indigo-200 text-[10px]">
+                          ({(msg.attachedDocument.size / 1024).toFixed(1)} KB)
+                        </span>
                       </div>
                     )}
+                    {msg.studentAnswer && (
+                      <div className="p-2 bg-indigo-700/60 border border-indigo-400/30 rounded-lg text-xs">
+                        <span className="font-semibold text-indigo-200 block mb-0.5">
+                          Submitted Draft for Review:
+                        </span>
+                        <p className="line-clamp-2 text-indigo-100 italic">
+                          "{msg.studentAnswer}"
+                        </p>
+                      </div>
+                    )}
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                      {msg.content}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm px-5 py-4 max-w-[95%] sm:max-w-[85%] shadow-sm space-y-3.5">
+                    {/* Header Badges */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="px-2.5 py-0.5 text-[10px] uppercase tracking-wider font-bold bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 rounded-md border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
+                        <Bot className="w-3 h-3" />
+                        AI • {msg.assistanceMode || "response"}
+                      </span>
 
-                  {/* Verification Questions - Compact Callout */}
-                  {msg.responseData?.verificationQuestions &&
-                    msg.responseData.verificationQuestions.length > 0 && (
-                      <div className="px-3 py-2 bg-indigo-50/70 dark:bg-indigo-950/40 rounded-lg text-xs text-indigo-900 dark:text-indigo-200 flex items-start gap-2 border border-indigo-100 dark:border-indigo-900/50">
-                        <HelpCircle className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 mt-0.5 flex-shrink-0" />
-                        <div className="space-y-0.5">
-                          <span className="font-semibold block">
-                            To verify independently:
-                          </span>
-                          {msg.responseData.verificationQuestions.map(
-                            (q: string, i: number) => (
-                              <p
-                                key={i}
-                                className="text-xs text-indigo-800 dark:text-indigo-300"
-                              >
-                                • {q}
+                      <span
+                        className={`px-2.5 py-0.5 text-[10px] uppercase tracking-wider font-bold rounded-md border ${badge.color}`}
+                      >
+                        {badge.label}
+                      </span>
+
+                      {msg.responseData?.status === "needs_clarification" && (
+                        <span className="px-2 py-0.5 text-[10px] font-bold bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 rounded-md border border-purple-200 dark:border-purple-800">
+                          Awaiting Student Draft
+                        </span>
+                      )}
+
+                      {msg.responseData?.requiresReview && (
+                        <span className="px-2.5 py-0.5 text-[10px] uppercase tracking-wider font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 rounded-md border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          Requires Review
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Main Response Text */}
+                    <div className="prose prose-sm dark:prose-invert max-w-none text-slate-800 dark:text-slate-100 leading-relaxed text-sm">
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                    </div>
+
+                    {/* Document Evidence Section */}
+                    {showDocumentEvidence &&
+                      msg.responseData?.documentEvidence &&
+                      msg.responseData.documentEvidence.length > 0 && (
+                        <div className="p-3 bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700 rounded-xl space-y-2 text-xs">
+                          <div className="flex items-center gap-1.5 font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider text-[10px]">
+                            <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>Document Evidence & Course Anchors</span>
+                          </div>
+                          {msg.responseData.documentEvidence.map((ev, idx) => (
+                            <div
+                              key={idx}
+                              className="p-2 bg-white dark:bg-slate-800 rounded border border-slate-200/80 dark:border-slate-700/80 space-y-1"
+                            >
+                              <span className="font-semibold text-indigo-700 dark:text-indigo-400 block">
+                                {ev.location}
+                              </span>
+                              <p className="text-slate-600 dark:text-slate-300 italic">
+                                "{ev.excerptOrSummary}"
                               </p>
-                            ),
-                          )}
+                              {ev.whyItMatters && (
+                                <p className="text-[11px] text-slate-500">
+                                  <strong>Why it matters:</strong>{" "}
+                                  {ev.whyItMatters}
+                                </p>
+                              )}
+                            </div>
+                          ))}
                         </div>
+                      )}
+
+                    {/* Key Points */}
+                    {msg.responseData?.keyPoints &&
+                      msg.responseData.keyPoints.length > 0 && (
+                        <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60 space-y-1">
+                          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                            <span>Key Takeaways</span>
+                          </p>
+                          <ul className="space-y-1 pl-1">
+                            {msg.responseData.keyPoints.map(
+                              (point: string, i: number) => (
+                                <li
+                                  key={i}
+                                  className="text-xs text-slate-700 dark:text-slate-300 flex items-start gap-2"
+                                >
+                                  <span className="text-indigo-500 font-bold">
+                                    •
+                                  </span>
+                                  <span>{point}</span>
+                                </li>
+                              ),
+                            )}
+                          </ul>
+                        </div>
+                      )}
+
+                    {/* Missing Information Callout */}
+                    {msg.responseData?.missingInformation &&
+                      msg.responseData.missingInformation.length > 0 && (
+                        <div className="p-2.5 bg-amber-50/80 dark:bg-amber-950/40 rounded-lg text-xs text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800 flex items-start gap-2">
+                          <Info className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                          <div className="space-y-0.5">
+                            <span className="font-bold block">
+                              Items Needed / Missing:
+                            </span>
+                            {msg.responseData.missingInformation.map(
+                              (info, idx) => (
+                                <p key={idx}>• {info}</p>
+                              ),
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                    {/* Verification Questions */}
+                    {msg.responseData?.verificationQuestions &&
+                      msg.responseData.verificationQuestions.length > 0 && (
+                        <div className="px-3 py-2 bg-indigo-50/70 dark:bg-indigo-950/40 rounded-lg text-xs text-indigo-900 dark:text-indigo-200 flex items-start gap-2 border border-indigo-100 dark:border-indigo-900/50">
+                          <HelpCircle className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 mt-0.5 flex-shrink-0" />
+                          <div className="space-y-0.5">
+                            <span className="font-semibold block">
+                              To verify independently:
+                            </span>
+                            {msg.responseData.verificationQuestions.map(
+                              (q: string, i: number) => (
+                                <p key={i}>• {q}</p>
+                              ),
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                    {/* Suggested Next Action */}
+                    {(msg.responseData?.suggestedNextAction ||
+                      msg.responseData?.suggestedNextActions?.[0]) && (
+                      <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 pt-1">
+                        <ArrowRight className="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" />
+                        <span>
+                          <strong className="text-slate-800 dark:text-slate-200">
+                            Recommended Next Step:
+                          </strong>{" "}
+                          {msg.responseData.suggestedNextAction ||
+                            msg.responseData.suggestedNextActions[0]}
+                        </span>
                       </div>
                     )}
 
-                  {/* Uncertainties Callout - If any */}
-                  {msg.responseData?.uncertainties &&
-                    msg.responseData.uncertainties.length > 0 && (
-                      <div className="bg-amber-50 dark:bg-amber-950/40 p-2.5 rounded-lg border border-amber-200 dark:border-amber-800 text-xs">
-                        <p className="font-semibold text-amber-900 dark:text-amber-200 mb-1 flex items-center gap-1.5">
-                          <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                          <span>Note to verify:</span>
-                        </p>
-                        <ul className="list-disc list-inside space-y-0.5 text-amber-800 dark:text-amber-300">
-                          {msg.responseData.uncertainties.map(
-                            (u: string, i: number) => (
-                              <li key={i}>{u}</li>
-                            ),
-                          )}
-                        </ul>
-                      </div>
-                    )}
-
-                  {/* Suggested Next Action */}
-                  {msg.responseData?.suggestedNextAction && (
-                    <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 pt-1">
-                      <ArrowRight className="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" />
-                      <span>
-                        <strong className="text-slate-800 dark:text-slate-200">
-                          Next Step:
-                        </strong>{" "}
-                        {msg.responseData.suggestedNextAction}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Action Bar (Follow-ups + Save/Discard) */}
-                  <div className="pt-2.5 border-t border-slate-100 dark:border-slate-700/60 flex flex-col gap-2.5">
-                    {msg.responseData?.followUpActions &&
-                      msg.responseData.followUpActions.length > 0 && (
+                    {/* Follow-up Action Buttons & Save */}
+                    <div className="pt-2.5 border-t border-slate-100 dark:border-slate-700/60 flex flex-col gap-2.5">
+                      {(msg.responseData?.suggestedNextActions ||
+                        msg.responseData?.followUpActions) && (
                         <div className="flex flex-wrap gap-1.5">
-                          {msg.responseData.followUpActions
+                          {(
+                            msg.responseData.suggestedNextActions ||
+                            msg.responseData.followUpActions ||
+                            []
+                          )
                             .slice(0, 3)
                             .map((action: string, i: number) => (
                               <button
@@ -836,30 +898,33 @@ export default function TaskCompanion({
                         </div>
                       )}
 
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() =>
-                          setMessages((prev) =>
-                            prev.filter((m) => m.id !== msg.id),
-                          )
-                        }
-                        className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-50 transition-colors"
-                      >
-                        Discard
-                      </button>
-                      <button
-                        onClick={() => initiateSave(msg.id, msg.responseData!)}
-                        className="px-3.5 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
-                      >
-                        <Receipt className="w-3.5 h-3.5" />
-                        <span>Save Response</span>
-                      </button>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() =>
+                            setMessages((prev) =>
+                              prev.filter((m) => m.id !== msg.id),
+                            )
+                          }
+                          className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-50 transition-colors"
+                        >
+                          Discard
+                        </button>
+                        <button
+                          onClick={() =>
+                            initiateSave(msg.id, msg.responseData!)
+                          }
+                          className="px-3.5 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+                        >
+                          <Receipt className="w-3.5 h-3.5" />
+                          <span>Save Response</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
-          ))
+                )}
+              </div>
+            );
+          })
         )}
 
         {isTyping && (
@@ -867,7 +932,7 @@ export default function TaskCompanion({
             <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-indigo-600 animate-spin" />
               <span className="text-xs text-slate-500">
-                StudyFlow is analyzing...
+                StudyFlow is analyzing in {languageMode.toUpperCase()}...
               </span>
             </div>
           </div>
@@ -893,245 +958,197 @@ export default function TaskCompanion({
 
       {/* Bottom Composer Area */}
       <div className="p-4 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 space-y-3">
-        {/* Assistance Mode Selector */}
+        {/* Assistance Mode Selector Pills */}
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mr-1">
             Mode:
           </span>
-          {(
-            [
-              { id: "explain", label: "Explain", icon: Lightbulb },
-              { id: "guide", label: "Guide", icon: Compass },
-              { id: "organize", label: "Organize", icon: ListOrdered },
-              { id: "explore", label: "Explore", icon: Search },
-              { id: "review", label: "Review", icon: CheckCircle2 },
-              { id: "draft", label: "Draft", icon: FileEdit },
-            ] as const
-          ).map(({ id, label, icon: ModeIcon }) => (
-            <button
-              key={id}
-              onClick={() => setMode(id)}
-              className={classNames(
-                "px-2.5 py-1 text-xs font-medium rounded-full transition-all border flex items-center gap-1.5",
-                mode === id
-                  ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
-                  : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100",
-              )}
-            >
-              <ModeIcon className="w-3.5 h-3.5" />
-              <span>{label}</span>
-            </button>
-          ))}
+          {ASSISTANCE_MODES.map((m) => {
+            const isSelected = mode === m.id;
+            return (
+              <button
+                key={m.id}
+                onClick={() => setMode(m.id)}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                  isSelected
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
+                }`}
+                title={m.description}
+              >
+                {m.id === "understand" && <Lightbulb className="w-3 h-3" />}
+                {m.id === "guide" && <Compass className="w-3 h-3" />}
+                {m.id === "organize" && <ListOrdered className="w-3 h-3" />}
+                {m.id === "explore" && <Search className="w-3 h-3" />}
+                {m.id === "review" && <CheckCircle2 className="w-3 h-3" />}
+                {m.id === "draft" && <FileEdit className="w-3 h-3" />}
+                <span>{m.label}</span>
+              </button>
+            );
+          })}
         </div>
 
-        {/* Draft Notice */}
-        {mode === "draft" && (
-          <div className="px-3 py-1.5 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 rounded-lg text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2">
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-            <span>
-              Preliminary AI-assisted output — review required before academic
-              use.
-            </span>
-          </div>
-        )}
+        {/* Language Preference Note */}
+        <div className="text-[11px] text-slate-400 dark:text-slate-500 flex items-center justify-between">
+          <span>
+            Choose the language style that makes the explanation easiest for you
+            to understand.
+          </span>
+          <span className="font-semibold text-slate-600 dark:text-slate-400">
+            Active:{" "}
+            {languageMode === "taglish"
+              ? "Taglish — Tagalog-English"
+              : languageMode.toUpperCase()}
+          </span>
+        </div>
 
-        {/* Attached Document Pill (if uploaded) */}
+        {/* Attached Document Preview Badge if staged */}
         {attachedDoc && (
-          <div className="flex items-center justify-between px-3 py-2 bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs">
+          <div className="flex items-center justify-between p-2 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 rounded-lg text-xs">
             <div className="flex items-center gap-2 truncate">
-              <FileText className="w-4 h-4 text-indigo-600 dark:text-indigo-400 flex-shrink-0" />
+              <FileText className="w-4 h-4 text-indigo-600 flex-shrink-0" />
               <span className="font-semibold text-indigo-900 dark:text-indigo-200 truncate">
-                {attachedDoc.name}
+                {attachedDoc.name} ({(attachedDoc.size / 1024).toFixed(1)} KB)
               </span>
-              <span className="text-indigo-600 dark:text-indigo-400">
-                ({(attachedDoc.size / 1024).toFixed(1)} KB, ~
-                {attachedDoc.wordCount} words)
+              <span className="text-[10px] text-indigo-700 dark:text-indigo-300">
+                • Readable extracted text
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() =>
-                  handleSendMessage(
-                    "Please check this document for any gibberish, hallucinated text, or unrelated topics, and verify its academic relevance.",
-                  )
-                }
-                className="px-2.5 py-1 bg-indigo-600 text-white rounded text-[11px] font-bold hover:bg-indigo-700 transition-colors flex items-center gap-1"
-              >
-                <CheckCircle2 className="w-3 h-3" />
-                <span>Verify Document</span>
-              </button>
-              <button
-                onClick={() => setAttachedDoc(null)}
-                className="text-slate-400 hover:text-red-500 font-bold p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
-                title="Remove attached document"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            <button
+              onClick={() => {
+                setAttachedDoc(null);
+              }}
+              className="text-slate-400 hover:text-red-500 p-1"
+            >
+              ✕
+            </button>
           </div>
         )}
 
-        {/* Main Input Box with File Upload Button */}
-        <div className="relative flex items-end gap-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
-          {/* Hidden File Input */}
+        {/* Input Textarea and Send Actions */}
+        <div className="relative flex items-end gap-2 bg-slate-50 dark:bg-slate-900 rounded-xl p-2 border border-slate-300 dark:border-slate-700 focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-transparent transition-all">
           <input
-            ref={fileInputRef}
             type="file"
-            accept=".pdf,.txt,.docx,.doc,.md"
+            ref={fileInputRef}
             onChange={handleFileUpload}
+            accept=".pdf,.txt,.docx,.doc,.md"
             className="hidden"
           />
 
-          {/* Attach Button */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={isParsingDoc || isTyping}
-            title="Upload academic document (PDF, TXT, DOCX) to review"
-            className="p-2 text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-colors flex-shrink-0"
+            title="Upload PDF, TXT, or DOCX"
+            className="p-2 text-slate-500 hover:text-indigo-600 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
           >
-            {isParsingDoc ? (
-              <RefreshCw className="w-4 h-4 animate-spin text-indigo-500" />
-            ) : (
-              <Paperclip className="w-4 h-4" />
-            )}
+            <FileText className="w-5 h-5" />
           </button>
 
           <textarea
             ref={textareaRef}
             value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              e.target.style.height = "auto";
-              e.target.style.height =
-                Math.min(e.target.scrollHeight, 120) + "px";
-            }}
+            onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={
-              attachedDoc
-                ? `Ask anything about ${attachedDoc.name}... (e.g. "Check for gibberish", "Summarize key claims")`
-                : `Ask Task Companion about ${selectedMaterial.title}... (or attach a PDF/TXT/DOCX file)`
-            }
-            className="w-full max-h-[120px] bg-transparent border-0 resize-none focus:ring-0 text-slate-900 dark:text-slate-100 placeholder-slate-400 py-1.5 px-1 min-h-[40px] text-sm"
+            placeholder={`Ask StudyFlow about ${selectedMaterial.title}... (e.g. "Help me start", "Explain the instructions")`}
             rows={1}
             maxLength={2000}
-            disabled={isTyping}
+            className="flex-1 bg-transparent border-none resize-none focus:outline-none text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 max-h-32 py-1 leading-relaxed"
           />
 
           <button
+            type="button"
             onClick={() => handleSendMessage()}
-            disabled={(!input.trim() && !attachedDoc) || isTyping || isCooldown}
-            className="flex-shrink-0 p-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-            aria-label="Send message"
-            title={isCooldown ? "Please wait a moment..." : "Send message"}
+            disabled={
+              (!input.trim() && !attachedDoc && !studentAnswer.trim()) ||
+              isTyping
+            }
+            className="p-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
           >
             <Send className="w-4 h-4" />
           </button>
-        </div>
-
-        {/* Input Footer Indicator */}
-        <div className="flex justify-between items-center text-[10px] text-slate-500 dark:text-slate-400 px-1">
-          <span>
-            {selectedMaterial.title} • {mode} mode • {GEMINI_MODEL_LABEL}
-          </span>
-          <span>{input.length}/2000</span>
         </div>
       </div>
 
       {/* Review Checkpoint Modal */}
       {showReviewModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-lg w-full p-6 border border-slate-200 dark:border-slate-800">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded-xl flex items-center justify-center">
-                <FileEdit className="w-5 h-5" />
-              </div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
-                Review this before saving
-              </h2>
-            </div>
-
-            <p className="text-xs text-slate-600 dark:text-slate-300 mb-5">
-              Reflecting on AI assistance builds metacognitive awareness. Answer
-              these brief questions before saving to your record.
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-indigo-600" />
+              <span>Review this before saving</span>
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-300">
+              Uphold metacognitive awareness and learning retention by
+              reflecting on the AI assistance before saving it to your local
+              records.
             </p>
 
-            <div className="space-y-4 mb-6">
+            <div className="space-y-3 text-xs">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  1. What is the main idea?
+                <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                  1. What is the main idea of the response?
                 </label>
                 <input
                   type="text"
                   value={reviewAnswers.mainIdea}
                   onChange={(e) =>
-                    setReviewAnswers({
-                      ...reviewAnswers,
+                    setReviewAnswers((prev) => ({
+                      ...prev,
                       mainIdea: e.target.value,
-                    })
+                    }))
                   }
-                  placeholder="Summary in a few words..."
-                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Summarize the core premise..."
+                  className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  2. What part should you verify?
+                <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                  2. What part should you verify against course materials?
                 </label>
                 <input
                   type="text"
                   value={reviewAnswers.whatToVerify}
                   onChange={(e) =>
-                    setReviewAnswers({
-                      ...reviewAnswers,
+                    setReviewAnswers((prev) => ({
+                      ...prev,
                       whatToVerify: e.target.value,
-                    })
+                    }))
                   }
-                  placeholder="Claims, facts, or instructions to check..."
-                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Identify claims, formulas, or equations to check..."
+                  className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  3. What would you explain differently in your own words?
+                <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                  3. What would you explain or revise in your own words?
                 </label>
-                <textarea
+                <input
+                  type="text"
                   value={reviewAnswers.ownWords}
                   onChange={(e) =>
-                    setReviewAnswers({
-                      ...reviewAnswers,
+                    setReviewAnswers((prev) => ({
+                      ...prev,
                       ownWords: e.target.value,
-                    })
+                    }))
                   }
-                  rows={2}
-                  placeholder="Your personal phrasing or perspective..."
-                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg focus:ring-2 focus:ring-indigo-500 resize-none"
+                  placeholder="Express key concepts in your own authentic words..."
+                  className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs"
                 />
               </div>
             </div>
 
-            <div className="flex justify-end gap-2.5">
+            <div className="flex justify-end gap-2 pt-2">
               <button
+                type="button"
                 onClick={() => setShowReviewModal(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                className="px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-100 rounded-lg"
               >
                 Cancel
               </button>
               <button
-                onClick={() =>
-                  saveResponse(
-                    showReviewModal.messageId,
-                    showReviewModal.response,
-                    null,
-                  )
-                }
-                className="px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded-lg transition-colors"
-              >
-                Skip Review & Save
-              </button>
-              <button
+                type="button"
                 onClick={() =>
                   saveResponse(
                     showReviewModal.messageId,
@@ -1139,7 +1156,7 @@ export default function TaskCompanion({
                     reviewAnswers,
                   )
                 }
-                className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-colors"
+                className="px-4 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm"
               >
                 Save with Review
               </button>
@@ -1150,83 +1167,86 @@ export default function TaskCompanion({
 
       {/* AI Learning Receipt Modal */}
       {showReceiptModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 dark:border-slate-800">
-            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-5 text-white text-center">
-              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-1">
-                <Receipt className="w-5 h-5 text-white" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-200 dark:border-slate-800">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <Receipt className="w-5 h-5 text-indigo-600" />
+                  <span>AI Learning Receipt</span>
+                </h3>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                  Prototype-only local record
+                </span>
               </div>
-              <h2 className="text-lg font-bold">AI Learning Receipt</h2>
-              <p className="text-[11px] opacity-90 mt-0.5">
-                Prototype-only local record.
+              <span className="text-xs text-slate-500">
+                {new Date(showReceiptModal.savedAt).toLocaleTimeString()}
+              </span>
+            </div>
+
+            <div className="space-y-2 text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+              <p>
+                <strong>Material:</strong> {showReceiptModal.materialTitle} (
+                {showReceiptModal.materialType})
+              </p>
+              <p>
+                <strong>Assistance Mode:</strong>{" "}
+                {showReceiptModal.assistanceMode} • <strong>Language:</strong>{" "}
+                {showReceiptModal.languageMode || "english"}
+              </p>
+              <p>
+                <strong>Student Request:</strong> "
+                {showReceiptModal.userMessage}"
+              </p>
+              {showReceiptModal.studentAnswer && (
+                <p>
+                  <strong>Student Draft:</strong> "
+                  {showReceiptModal.studentAnswer.slice(0, 120)}..."
+                </p>
+              )}
+              <p>
+                <strong>Service Source:</strong> {showReceiptModal.source}
               </p>
             </div>
 
-            <div className="p-5 space-y-4">
-              <div className="bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Material:</span>
-                  <span className="font-bold text-slate-900 dark:text-slate-100 truncate max-w-[200px]">
-                    {showReceiptModal.materialTitle}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">
-                    Assistance Mode:
-                  </span>
-                  <span className="capitalize font-bold text-indigo-600 dark:text-indigo-400">
-                    {showReceiptModal.assistanceMode}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">
-                    Service Source:
-                  </span>
-                  <span className="font-mono text-[11px] bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-                    {showReceiptModal.source}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Saved At:</span>
-                  <span className="text-slate-700 dark:text-slate-300">
-                    {new Date(showReceiptModal.savedAt).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                </div>
+            {showReceiptModal.reviewAnswers && (
+              <div className="text-xs space-y-1 bg-indigo-50/70 dark:bg-indigo-950/40 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
+                <span className="font-bold text-indigo-900 dark:text-indigo-300 block">
+                  Student Metacognitive Review:
+                </span>
+                <p>
+                  • Main Idea:{" "}
+                  {showReceiptModal.reviewAnswers.mainIdea || "Noted"}
+                </p>
+                <p>
+                  • What to Verify:{" "}
+                  {showReceiptModal.reviewAnswers.whatToVerify || "Verified"}
+                </p>
+                <p>
+                  • In Own Words:{" "}
+                  {showReceiptModal.reviewAnswers.ownWords || "Refined"}
+                </p>
               </div>
+            )}
 
-              {showReceiptModal.reviewAnswers?.mainIdea && (
-                <div className="p-3 bg-blue-50 dark:bg-blue-950/40 rounded-xl text-xs space-y-1 border border-blue-100 dark:border-blue-900">
-                  <span className="font-bold text-blue-900 dark:text-blue-200">
-                    Main Idea Identified:
-                  </span>
-                  <p className="text-blue-800 dark:text-blue-300">
-                    {showReceiptModal.reviewAnswers.mainIdea}
-                  </p>
-                </div>
-              )}
+            <div>
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                Student Reflection Notes:
+              </label>
+              <textarea
+                value={reflection}
+                onChange={(e) => setReflection(e.target.value)}
+                placeholder="Add your own study notes or questions for your professor..."
+                rows={2}
+                className="w-full p-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs"
+              />
+            </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Student Reflection Notes:
-                </label>
-                <textarea
-                  value={reflection}
-                  onChange={(e) => setReflection(e.target.value)}
-                  placeholder="Add notes for your defense or instructor review..."
-                  rows={2}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg focus:ring-2 focus:ring-emerald-500 resize-none"
-                />
-              </div>
-
+            <div className="flex justify-end pt-2">
               <button
-                onClick={() => {
-                  setShowReceiptModal(null);
-                  setReflection("");
-                }}
-                className="w-full py-2.5 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold rounded-xl text-xs hover:bg-slate-800 transition-colors shadow"
+                type="button"
+                onClick={() => setShowReceiptModal(null)}
+                className="px-4 py-2 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm"
               >
                 Close Receipt
               </button>

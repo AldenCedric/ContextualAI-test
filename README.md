@@ -17,14 +17,16 @@ StudyFlow addresses the challenge of cognitive overload and passive dependency i
 The application scaffolds students through the workflow:  
 **Academic Material → Understanding → Manageable Actions → Contextual AI Assistance → Student Review**
 
-Students can work with a wide range of academic materials:
+Students can work with a wide range of academic materials (8 core types implemented):
 
-- Class activities & worksheets
-- Handouts & readings
-- Problem sets
-- Presentations
-- Research activities
-- Assignments & project milestones
+1. **Activity:** e.g., Photosynthesis Activity (concept exploration & biochemical roles)
+2. **Handout:** e.g., Academic Stress Handout (stress-sleep relationship analysis)
+3. **Problem Set:** e.g., Statistics Problem Set (descriptive statistics & variance)
+4. **Presentation:** e.g., Responsible AI Presentation (presentation outlines & ethical slide flow)
+5. **Reflection Paper:** e.g., Reflection Paper on Student Well-Being (personal synthesis & metacognition)
+6. **Research Activity:** e.g., Research Activity on Student Learning (methodology & literature scoping)
+7. **Worksheet:** e.g., Reading Comprehension Worksheet (close reading & argument identification)
+8. **Group Project:** e.g., Group Project Instructions (milestone planning & team task delegation)
 
 ---
 
@@ -34,9 +36,10 @@ Students can work with a wide range of academic materials:
 - **Library:** React 19.2.8
 - **Language:** TypeScript 5
 - **Styling:** Tailwind CSS 4
-- **Language Model:** Google Gemini 3.8 Flash (`gemini-3.8-flash`) via server-side REST API route with centralized constants ([`lib/constants.ts`](ContextualAI-test/lib/constants.ts))
-- **Continuous Integration (CI):** GitHub Actions ([`.github/workflows/ci.yml`](ContextualAI-test/.github/workflows/ci.yml)) validating TypeScript type check, ESLint, and production build on every push and pull request to `main`
-- **Dynamic Contextual Engine:** Client- and server-side data-driven scaffolding engine synthesizing responses dynamically from material metadata, student queries, and assistance modes ([`lib/contextual-engine.ts`](ContextualAI-test/lib/contextual-engine.ts))
+- **Language Model:** Google Gemini 3.8 Flash (`gemini-3.8-flash`) via server-side REST API route with centralized constants ([`lib/constants.ts`](lib/constants.ts))
+- **Continuous Integration (CI):** GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) validating TypeScript type check, ESLint, and production build on every push and pull request to `main`
+- **Dynamic Contextual Engine:** Client- and server-side data-driven scaffolding engine synthesizing responses dynamically from material metadata, student queries, and assistance modes ([`lib/contextual-engine.ts`](lib/contextual-engine.ts))
+- **Language Modes:** Native support for English, Filipino, and Taglish (Filipino-English natural code-switching)
 - **Architecture:** Zero-database demonstration prototype using client-side state and browser `localStorage` for offline persistence
 
 ---
@@ -91,7 +94,7 @@ npm start
 
 ### GitHub Actions CI Pipeline
 
-The project includes an automated CI workflow at [`.github/workflows/ci.yml`](file:///c:/Users/user/source/repos/AldenCedric/ContextualAI-test/.github/workflows/ci.yml) that executes sequentially on every push and pull request to `main`:
+The project includes an automated CI workflow at [`.github/workflows/ci.yml`](.github/workflows/ci.yml) that executes sequentially on every push and pull request to `main`:
 
 1. **Dependency Installation:** `npm install` using Node 22 with npm caching.
 2. **Type Check:** `npx tsc --noEmit` verifies strict TypeScript typing across all components, utilities, and API routes.
@@ -128,8 +131,8 @@ The project includes an automated CI workflow at [`.github/workflows/ci.yml`](fi
 4. Send an inquiry (e.g., _"Help me understand how recursion works"_ or _"What are the main arguments for this case?"_).
 5. **Observe Dynamic Synthesis:**
    - The engine does **not** return rigid, hardcoded text.
-   - It performs intelligent tokenization and stop-word filtering ([`extractKeywords`](ContextualAI-test/lib/contextual-engine.ts#L284)) to extract meaningful concepts directly from your input.
-   - It invokes [`buildModeScaffolding`](ContextualAI-test/lib/contextual-engine.ts#L315) across the selected assistance mode (`explain`, `guide`, `organize`, `explore`, `review`, `draft`), tailoring the pedagogical structure to the material title, material type, active task, and extracted keywords.
+   - It performs intelligent tokenization and stop-word filtering ([`extractKeywords`](lib/contextual-engine.ts)) to extract meaningful concepts directly from your input.
+   - It invokes [`buildModeScaffolding`](lib/contextual-engine.ts) across the selected assistance mode (`explain`, `guide`, `organize`, `explore`, `review`, `draft`), tailoring the pedagogical structure to the material title, material type, active task, and extracted keywords.
    - The response remains formatted as a structured, interactive card with key points, next steps, verification questions, and follow-up chips.
 
 ### Testing Metacognitive Scaffolding & Safeguards
@@ -167,6 +170,7 @@ Follow this exact sequence during the thesis defense presentation:
 ## 8. Implemented Features
 
 ### Generic Academic Routes
+
 - `/` — Presentation landing page with interactive flow visualization and mode showcase.
 - `/dashboard` — Daily agenda, continue where left off, deadlines, literacy prompts, quick actions.
 - `/materials` — Categorized directory with live title search and material-type filtering.
@@ -175,6 +179,7 @@ Follow this exact sequence during the thesis defense presentation:
 - `/prototype-controls` — Interactive defense control panel with key simulation toggles and demo reset.
 
 ### 6 Contextual Assistance Modes
+
 - 💡 **Explain:** Clarifies instructions or foundational concepts with conceptual breakdown and analogies.
 - 🧭 **Guide:** Provides hints, prerequisites, and probing questions before giving a full answer.
 - 📋 **Organize:** Breaks broad tasks into sequential, actionable checkpoints.
@@ -182,30 +187,45 @@ Follow this exact sequence during the thesis defense presentation:
 - ✅ **Review:** Reviews the student's attempt across completeness, accuracy, clarity, and originality.
 - 📝 **Draft:** Generates preliminary outlines clearly tagged with _"Preliminary AI-assisted output — review required."_
 
-### Dynamic Contextual Scaffolding Engine ([`lib/contextual-engine.ts`](ContextualAI-test/lib/contextual-engine.ts))
+### Dynamic Contextual Scaffolding Engine ([`lib/contextual-engine.ts`](lib/contextual-engine.ts))
+
 - **Elimination of Hardcoded Branches:** Replaced all hardcoded subject-specific paths with a data-driven synthesis pipeline.
-- **Intelligent Keyword Extraction ([`extractKeywords`](ContextualAI-test/lib/contextual-engine.ts#L284)):** Natural language tokenization with stop-word filtering extracts meaningful academic terminology from user messages.
-- **Mode-Specific Pedagogical Scaffolding ([`buildModeScaffolding`](ContextualAI-test/lib/contextual-engine.ts#L315)):** Dedicated strategies for each of the 6 assistance modes dynamically interpolate material metadata (title, type, task) with extracted keywords.
+- **Intelligent Keyword Extraction ([`extractKeywords`](lib/contextual-engine.ts)):** Natural language tokenization with stop-word filtering extracts meaningful academic terminology from user messages.
+- **Mode-Specific Pedagogical Scaffolding ([`buildModeScaffolding`](lib/contextual-engine.ts)):** Dedicated strategies for each of the 6 assistance modes dynamically interpolate material metadata (title, type, task) with extracted keywords.
+- **Tri-Part Interaction Model:** Strictly decouples:
+  1. _The Academic Material_ (instructions & content)
+  2. _The Student's Actual Answer or Draft_ (`studentAnswer`)
+  3. _The Student's Conversational Chat Message_ (`userMessage`)  
+     _Never_ evaluates casual conversational phrases ("sure, let's start") as academic claims.
+- **Grounded Document Readability Notice:** When documents are attached, explicitly informs the student:
+  > _"The document was successfully opened and its text could be extracted. This confirms that the file is technically readable; it does not confirm that the answers are correct, complete, or aligned with your instructor's rubric."_
+- **Multilingual Support (Language Modes):**
+  - **English:** Formal, clear academic support.
+  - **Filipino:** Natural academic Filipino guidance.
+  - **Taglish:** Authentic code-switching preserving technical English terms while conversing warmly in Filipino.
 - **Resilient JSON Recovery:** API routes dynamically construct fallback response cards using material metadata when raw model output cannot be parsed as JSON, eliminating brittle static fallbacks.
 - **Core Thesis Safeguards:** Strictly enforces cognitive offloading detection (refusing direct answer generation), document text anomaly detection (gibberish/consonant cluster filtering), and safe token window slicing.
 
-### Centralized Model & System Constants ([`lib/constants.ts`](ContextualAI-test/lib/constants.ts))
+### Centralized Model & System Constants ([`lib/constants.ts`](lib/constants.ts))
+
 - Single source of truth for canonical model identifiers (`GEMINI_MODEL = "gemini-3.8-flash"`) and human-readable UI labels (`GEMINI_MODEL_LABEL = "Gemini 3.8 Flash"`).
 - Global constraints: `MAX_MESSAGE_LENGTH = 2000`, `MAX_HISTORY_ENTRIES = 6`, `RATE_LIMIT_MAX_REQUESTS = 35`, and `RATE_LIMIT_WINDOW_MS = 60000`.
 - Synchronized across API route handlers (`app/api/chat/route.ts`) and client-side UI footers (`components/TaskCompanion.tsx`).
 
-### Automated CI/CD Quality Pipeline ([`.github/workflows/ci.yml`](ContextualAI-test/.github/workflows/ci.yml))
+### Automated CI/CD Quality Pipeline ([`.github/workflows/ci.yml`](.github/workflows/ci.yml))
+
 - GitHub Actions CI running on pushes and pull requests to `main`.
-- Canonical package manager enforcement (`pnpm@12.6.0` via Corepack and lockfile synchronization).
-- Sequential quality gates: `pnpm install --frozen-lockfile` → `tsc --noEmit` → `pnpm run lint` → `pnpm run build`.
+- Sequential quality gates: `npm install` → `npx tsc --noEmit` → `npm run lint` → `npm run build`.
 - Automatic cancellation of stale workflows on successive commits via GitHub Actions concurrency groups.
 
 ### Cognitive Scaffolding & Verification
+
 - **Structured Response Format:** Type-safe JSON handling for key points, next steps, verification questions, and uncertainties.
 - **Review Checkpoint Modal:** Interactive reflection modal requiring students to summarize key takeaways, verify evidence, and explain concepts in their own words before saving AI outputs.
 - **AI Learning Receipt:** Verifiable local audit receipt capturing student agency, timestamp, assistance mode, and review responses.
 
 ### Four-Tier Resilience Architecture
+
 $$\text{Primary Gemini 3.8 Flash} \longrightarrow \text{Fallback Key 1} \longrightarrow \text{Fallback Key 2} \longrightarrow \text{Dynamic Contextual Scaffolding Engine}$$
 
 - **Client-Side Persistence:** LocalStorage support for student notes, conversation history, progress, and settings.
@@ -233,7 +253,7 @@ The prototype presents non-functional UI placeholders for future enhancements:
 - **Storage Scope:** Uses browser `localStorage`; data is per-device/browser.
 - **Authentication:** Authentication is intentionally omitted for instant defense evaluation.
 - **File Upload:** Relies on pre-configured representative materials and client-side extraction rather than full server-side file management.
-- **Rate Limiting:** Implements an in-memory IP rate limiter (35 req/min, defined in [`lib/constants.ts`](file:///c:/Users/user/source/repos/AldenCedric/ContextualAI-test/lib/constants.ts)) appropriate for prototype demonstrations.
+- **Rate Limiting:** Implements an in-memory IP rate limiter (35 req/min, defined in [`lib/constants.ts`](lib/constants.ts)) appropriate for prototype demonstrations.
 
 ---
 

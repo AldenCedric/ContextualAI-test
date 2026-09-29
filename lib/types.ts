@@ -4,19 +4,32 @@ export type MaterialType =
   | "Assignment"
   | "Problem Set"
   | "Presentation"
+  | "Reflection Paper"
   | "Research Activity"
-  | "Reading"
-  | "Project";
+  | "Worksheet"
+  | "Group Project"
+  | "Reading";
 
 export type AssistanceMode =
-  | "explain"
+  | "understand"
   | "guide"
   | "organize"
   | "explore"
   | "review"
   | "draft";
 
+export type LanguageMode = "english" | "filipino" | "taglish";
+
+export type ResponseStatus =
+  | "needs_clarification"
+  | "document_overview"
+  | "guided_help"
+  | "answer_review"
+  | "checklist"
+  | "draft";
+
 export type ResponseType =
+  | ResponseStatus
   | "explanation"
   | "guidance"
   | "checklist"
@@ -26,6 +39,10 @@ export type ResponseType =
   | "draft";
 
 export type ServiceSource =
+  | "gemini-live"
+  | "gemini-backup"
+  | "local-fallback"
+  // Legacy aliases for backward compatibility
   | "gemini-primary"
   | "gemini-fallback-1"
   | "gemini-fallback-2"
@@ -39,16 +56,43 @@ export type ServiceMode =
   | "local"
   | "demo";
 
+export interface DocumentEvidenceItem {
+  location: string;
+  excerptOrSummary: string;
+  whyItMatters: string;
+}
+
 export interface Material {
   id: string;
   title: string;
   type: MaterialType;
   description: string;
+  instructions?: string;
+  content?: string;
   deadline?: string;
   progress: number; // 0-100
   status: "not-started" | "in-progress" | "completed";
   notes?: string;
   currentTask?: string;
+  studentAnswer?: string;
+}
+
+export interface GeminiResponse {
+  status: ResponseStatus;
+  directResponse: string;
+  response?: string; // backward compat alias for directResponse
+  responseType?: string; // backward compat
+  documentEvidence?: DocumentEvidenceItem[];
+  keyPoints: string[];
+  missingInformation?: string[];
+  suggestedNextActions: string[];
+  suggestedNextAction?: string; // backward compat alias
+  followUpActions?: string[]; // backward compat alias
+  verificationQuestions: string[];
+  uncertainties?: string[];
+  requiresStudentAnswer?: boolean;
+  requiresReview: boolean;
+  languageMode?: LanguageMode;
 }
 
 export interface ChatMessage {
@@ -57,6 +101,7 @@ export interface ChatMessage {
   content: string;
   timestamp: string;
   assistanceMode?: AssistanceMode;
+  languageMode?: LanguageMode;
   responseData?: GeminiResponse;
   source?: ServiceSource;
   attachedDocument?: {
@@ -64,25 +109,34 @@ export interface ChatMessage {
     size: number;
     wordCount?: number;
   };
-}
-
-export interface GeminiResponse {
-  response: string;
-  responseType: ResponseType;
-  keyPoints: string[];
-  suggestedNextAction: string;
-  followUpActions: string[];
-  verificationQuestions: string[];
-  uncertainties: string[];
-  requiresReview: boolean;
+  studentAnswer?: string;
 }
 
 export interface ChatRequest {
-  material: Pick<Material, "id" | "title" | "type" | "description">;
-  currentTask: string;
+  material: {
+    id?: string;
+    title: string;
+    type: string;
+    instructions?: string;
+    content?: string;
+    description?: string;
+  };
+  currentTask?: string;
+  studentAnswer?: string | null;
+  userMessage?: string;
+  message?: string; // backward compat alias
   assistanceMode: AssistanceMode;
+  languageMode?: LanguageMode;
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }>;
-  message: string;
+  attachedDocument?: {
+    name: string;
+    size: number;
+    text?: string;
+    base64?: string;
+    wordCount?: number;
+  };
+  stream?: boolean;
+  forceMode?: ServiceMode;
 }
 
 export interface SavedResponse {
@@ -91,8 +145,10 @@ export interface SavedResponse {
   materialTitle: string;
   materialType: MaterialType;
   currentTask: string;
+  languageMode?: LanguageMode;
   assistanceMode: AssistanceMode;
   userMessage: string;
+  studentAnswer?: string;
   responseData: GeminiResponse;
   reviewAnswers?: ReviewAnswers;
   studentReflection?: string;
@@ -108,9 +164,11 @@ export interface ReviewAnswers {
 
 export interface PrototypeSettings {
   serviceMode: ServiceMode;
+  languageMode: LanguageMode;
   showReviewCheckpoint: boolean;
+  showDocumentEvidence: boolean;
   showFuturePlaceholders: boolean;
 }
 
-// Alias for components that reference this type by an alternative name
+// Alias for components that reference this type
 export type ChatResponseData = GeminiResponse;

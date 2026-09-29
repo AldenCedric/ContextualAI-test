@@ -15,55 +15,61 @@ import {
   ShieldCheck,
   Cloud,
   Sparkles,
+  AlertTriangle,
+  Languages,
 } from "lucide-react";
 
 const getFeatureIcon = (id: string) => {
   switch (id) {
     case "upload":
       return (
-        <Upload className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+        <Upload className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
       );
     case "ocr":
       return (
-        <Camera className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+        <Camera className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
       );
     case "calendar":
       return (
-        <Calendar className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+        <Calendar className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
       );
     case "screen-free":
       return (
-        <Leaf className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+        <Leaf className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
       );
     case "wellness":
-      return <Heart className="w-6 h-6 text-rose-600 dark:text-rose-400" />;
+      return <Heart className="w-5 h-5 text-rose-600 dark:text-rose-400" />;
     case "widget":
       return (
-        <Smartphone className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+        <Smartphone className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
       );
     case "mobile":
       return (
-        <TabletSmartphone className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+        <TabletSmartphone className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
       );
     case "privacy":
       return (
-        <ShieldCheck className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+        <ShieldCheck className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
       );
     case "cloud":
-      return <Cloud className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />;
+      return <Cloud className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />;
     default:
       return (
-        <Sparkles className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+        <Sparkles className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
       );
   }
 };
 
 export default function PrototypeControlsPage() {
   const {
-    fallbackLevel,
-    setFallbackLevel,
+    serviceMode,
+    setServiceMode,
+    languageMode,
+    setLanguageMode,
     showReviewCheckpoint,
     setShowReviewCheckpoint,
+    showDocumentEvidence,
+    setShowDocumentEvidence,
     showFuturePlaceholders,
     setShowFuturePlaceholders,
   } = usePrototype();
@@ -87,7 +93,7 @@ export default function PrototypeControlsPage() {
   };
 
   const handleClearChat = () => {
-    if (confirm("Clear local chat history?")) {
+    if (confirm("Clear local chat history for all materials?")) {
       const keysToRemove = Object.keys(localStorage).filter((key) =>
         key.startsWith("studyflow-chat-"),
       );
@@ -97,7 +103,7 @@ export default function PrototypeControlsPage() {
   };
 
   const handleClearSaved = () => {
-    if (confirm("Clear saved AI responses?")) {
+    if (confirm("Clear saved AI Learning Receipts?")) {
       localStorage.removeItem("studyflow-saved-responses");
       showFeedback("Saved AI responses cleared");
     }
@@ -106,321 +112,299 @@ export default function PrototypeControlsPage() {
   return (
     <AppShell>
       <div className="max-w-4xl mx-auto space-y-8 pb-12">
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-md">
+        {/* Yellow Notice Banner */}
+        <div className="bg-yellow-50 dark:bg-yellow-950/40 border-l-4 border-yellow-400 p-4 rounded-r-md">
           <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <svg
-                className="h-5 w-5 text-yellow-400"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-yellow-700 font-medium">
-                Prototype demonstration controls enabled.
-              </p>
-            </div>
+            <AlertTriangle className="h-5 w-5 text-yellow-500 mr-3 flex-shrink-0" />
+            <p className="text-sm text-yellow-800 dark:text-yellow-200 font-semibold">
+              Prototype demonstration controls enabled.
+            </p>
           </div>
         </div>
 
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-1">
             Prototype Controls
           </h1>
-          <p className="text-slate-600">
-            These controls are for thesis defense demonstration only.
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            These controls are for thesis defense demonstration only. API keys
+            are kept securely server-side and never exposed.
           </p>
         </div>
 
         {feedback && (
-          <div
-            className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded relative"
-            role="alert"
-          >
-            <span className="block sm:inline">{feedback}</span>
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-2.5 rounded-lg text-xs font-semibold">
+            {feedback}
           </div>
         )}
 
-        <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <h2 className="text-xl font-semibold text-slate-800 mb-4 flex items-center">
-            <span className="w-3 h-3 rounded-full mr-2 bg-indigo-500"></span>
-            AI Service Mode
+        {/* 1. Language Mode Selector */}
+        <section className="bg-white dark:bg-slate-900 rounded-xl shadow-xs border border-slate-200 dark:border-slate-800 p-6 space-y-4">
+          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <Languages className="w-5 h-5 text-indigo-600" />
+            <span>Language Mode</span>
           </h2>
-          <div className="space-y-4">
-            <label className="flex items-start p-4 border rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+          <p className="text-xs text-slate-500">
+            Choose the language style that makes the explanation easiest for
+            university students to understand.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <label
+              className={`p-4 border rounded-xl cursor-pointer transition-all flex flex-col justify-between ${
+                languageMode === "english"
+                  ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/30"
+                  : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-bold text-sm text-slate-900 dark:text-white">
+                  English
+                </span>
+                <input
+                  type="radio"
+                  name="languageMode"
+                  checked={languageMode === "english"}
+                  onChange={() => setLanguageMode("english")}
+                  className="text-indigo-600"
+                />
+              </div>
+              <span className="text-xs text-slate-500">
+                Clear academic English avoiding unnecessary complexity.
+              </span>
+            </label>
+
+            <label
+              className={`p-4 border rounded-xl cursor-pointer transition-all flex flex-col justify-between ${
+                languageMode === "filipino"
+                  ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/30"
+                  : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-bold text-sm text-slate-900 dark:text-white">
+                  Filipino
+                </span>
+                <input
+                  type="radio"
+                  name="languageMode"
+                  checked={languageMode === "filipino"}
+                  onChange={() => setLanguageMode("filipino")}
+                  className="text-indigo-600"
+                />
+              </div>
+              <span className="text-xs text-slate-500">
+                Primarily Filipino with technical terms kept in English when
+                clearer.
+              </span>
+            </label>
+
+            <label
+              className={`p-4 border rounded-xl cursor-pointer transition-all flex flex-col justify-between ${
+                languageMode === "taglish"
+                  ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/30"
+                  : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-bold text-sm text-slate-900 dark:text-white">
+                  Taglish
+                </span>
+                <input
+                  type="radio"
+                  name="languageMode"
+                  checked={languageMode === "taglish"}
+                  onChange={() => setLanguageMode("taglish")}
+                  className="text-indigo-600"
+                />
+              </div>
+              <span className="text-xs text-slate-500">
+                Taglish — Tagalog-English code-switching for Filipino university
+                students.
+              </span>
+            </label>
+          </div>
+        </section>
+
+        {/* 2. AI Service Mode */}
+        <section className="bg-white dark:bg-slate-900 rounded-xl shadow-xs border border-slate-200 dark:border-slate-800 p-6 space-y-4">
+          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
+            <span>AI Service Mode</span>
+          </h2>
+          <div className="space-y-3">
+            <label className="flex items-start p-3.5 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors border-slate-200 dark:border-slate-700">
               <input
                 type="radio"
-                name="fallbackLevel"
-                className="mt-1 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                checked={fallbackLevel === "primary"}
-                onChange={() => setFallbackLevel("primary")}
+                name="serviceMode"
+                className="mt-1 text-indigo-600"
+                checked={serviceMode === "primary"}
+                onChange={() => setServiceMode("primary")}
               />
               <div className="ml-3">
-                <span className="block text-sm font-medium text-slate-900">
+                <span className="block text-sm font-semibold text-slate-900 dark:text-white">
                   Primary Gemini (Default)
                 </span>
-                <span className="block text-sm text-slate-500">
-                  Uses the primary API key
+                <span className="block text-xs text-slate-500">
+                  Uses GEMINI_API_KEY with automatic failover to fallback keys.
                 </span>
               </div>
             </label>
 
-            <label className="flex items-start p-4 border rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+            <label className="flex items-start p-3.5 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors border-slate-200 dark:border-slate-700">
               <input
                 type="radio"
-                name="fallbackLevel"
-                className="mt-1 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                checked={fallbackLevel === "fallback-1"}
-                onChange={() => setFallbackLevel("fallback-1")}
+                name="serviceMode"
+                className="mt-1 text-indigo-600"
+                checked={serviceMode === "fallback-1"}
+                onChange={() => setServiceMode("fallback-1")}
               />
               <div className="ml-3">
-                <span className="block text-sm font-medium text-slate-900">
-                  Force Fallback Key 1
+                <span className="block text-sm font-semibold text-slate-900 dark:text-white">
+                  Backup AI Service 1
                 </span>
-                <span className="block text-sm text-slate-500">
-                  Simulates primary key failure
+                <span className="block text-xs text-slate-500">
+                  Simulates primary key exhaustion; calls
+                  GEMINI_API_KEY_FALLBACK_1.
                 </span>
               </div>
             </label>
 
-            <label className="flex items-start p-4 border rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+            <label className="flex items-start p-3.5 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors border-slate-200 dark:border-slate-700">
               <input
                 type="radio"
-                name="fallbackLevel"
-                className="mt-1 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                checked={fallbackLevel === "fallback-2"}
-                onChange={() => setFallbackLevel("fallback-2")}
+                name="serviceMode"
+                className="mt-1 text-indigo-600"
+                checked={serviceMode === "fallback-2"}
+                onChange={() => setServiceMode("fallback-2")}
               />
               <div className="ml-3">
-                <span className="block text-sm font-medium text-slate-900">
-                  Force Fallback Key 2
+                <span className="block text-sm font-semibold text-slate-900 dark:text-white">
+                  Backup AI Service 2
                 </span>
-                <span className="block text-sm text-slate-500">
-                  Simulates both primary and fallback 1 failure
+                <span className="block text-xs text-slate-500">
+                  Simulates primary and secondary key exhaustion; calls
+                  GEMINI_API_KEY_FALLBACK_2.
                 </span>
               </div>
             </label>
 
-            <label className="flex items-start p-4 border border-indigo-200 dark:border-indigo-800 bg-indigo-50/40 dark:bg-indigo-950/20 rounded-lg cursor-pointer hover:bg-indigo-50/70 transition-colors">
+            <label className="flex items-start p-3.5 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors border-slate-200 dark:border-slate-700">
               <input
                 type="radio"
-                name="fallbackLevel"
-                className="mt-1 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                checked={fallbackLevel === "demo"}
-                onChange={() => setFallbackLevel("demo")}
+                name="serviceMode"
+                className="mt-1 text-indigo-600"
+                checked={serviceMode === "local"}
+                onChange={() => setServiceMode("local")}
               />
               <div className="ml-3">
-                <span className="block text-sm font-bold text-indigo-900 dark:text-indigo-200">
-                  Demo Simulation Mode (Conserves 100% API Quota)
+                <span className="block text-sm font-semibold text-slate-900 dark:text-white">
+                  Local Academic Fallback
                 </span>
-                <span className="block text-sm text-indigo-700 dark:text-indigo-400">
-                  Generates realistic academic verification and task guidance
-                  locally. Perfect for rehearsing the presentation without
-                  consuming the daily 20-request limit.
-                </span>
-              </div>
-            </label>
-
-            <label className="flex items-start p-4 border rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
-              <input
-                type="radio"
-                name="fallbackLevel"
-                className="mt-1 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                checked={fallbackLevel === "local"}
-                onChange={() => setFallbackLevel("local")}
-              />
-              <div className="ml-3">
-                <span className="block text-sm font-medium text-slate-900">
-                  Force Local Template
-                </span>
-                <span className="block text-sm text-slate-500">
-                  Simulates complete API failure, uses offline templates
+                <span className="block text-xs text-slate-500">
+                  Simulates offline or complete API exhaustion using localized
+                  templates.
                 </span>
               </div>
             </label>
           </div>
         </section>
 
-        <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <h2 className="text-xl font-semibold text-slate-800 mb-4">
-            Demo Controls
+        {/* 3. Demo Controls */}
+        <section className="bg-white dark:bg-slate-900 rounded-xl shadow-xs border border-slate-200 dark:border-slate-800 p-6 space-y-4">
+          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">
+            Demo Toggles & Storage
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <button
               onClick={handleResetDemo}
-              className="px-4 py-3 bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 transition-colors font-medium text-left"
+              className="px-4 py-2.5 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-100 text-xs font-semibold"
             >
-              Reset Demo
+              Reset Demo (All Storage)
             </button>
             <button
               onClick={handleClearChat}
-              className="px-4 py-3 bg-slate-50 text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors font-medium text-left"
+              className="px-4 py-2.5 bg-slate-50 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-100 text-xs font-semibold"
             >
               Clear Local Chat
             </button>
             <button
               onClick={handleClearSaved}
-              className="px-4 py-3 bg-slate-50 text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors font-medium text-left"
+              className="px-4 py-2.5 bg-slate-50 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-100 text-xs font-semibold"
             >
               Clear Saved Responses
             </button>
+          </div>
 
-            <label className="flex items-center p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+          <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <label className="flex items-center p-3 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800">
               <input
                 type="checkbox"
-                className="h-4 w-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                className="h-4 w-4 text-indigo-600 rounded"
                 checked={showReviewCheckpoint}
                 onChange={(e) => setShowReviewCheckpoint(e.target.checked)}
               />
-              <span className="ml-3 text-sm font-medium text-slate-900">
-                Toggle Review Checkpoint
+              <span className="ml-3 text-xs font-semibold text-slate-900 dark:text-white">
+                Toggle Review Checkpoint (Metacognitive Reflection Modal before
+                Save)
               </span>
             </label>
 
-            <label className="flex items-center p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+            <label className="flex items-center p-3 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800">
               <input
                 type="checkbox"
-                className="h-4 w-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                className="h-4 w-4 text-indigo-600 rounded"
+                checked={showDocumentEvidence}
+                onChange={(e) => setShowDocumentEvidence(e.target.checked)}
+              />
+              <span className="ml-3 text-xs font-semibold text-slate-900 dark:text-white">
+                Toggle Document Evidence Display in Chat Cards
+              </span>
+            </label>
+
+            <label className="flex items-center p-3 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800">
+              <input
+                type="checkbox"
+                className="h-4 w-4 text-indigo-600 rounded"
                 checked={showFuturePlaceholders}
                 onChange={(e) => setShowFuturePlaceholders(e.target.checked)}
               />
-              <span className="ml-3 text-sm font-medium text-slate-900">
+              <span className="ml-3 text-xs font-semibold text-slate-900 dark:text-white">
                 Toggle Future Feature Placeholders
               </span>
             </label>
           </div>
         </section>
 
+        {/* 4. Future Features Roadmap */}
         {showFuturePlaceholders && (
-          <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <h2 className="text-xl font-semibold text-slate-800 mb-4">
+          <section className="bg-white dark:bg-slate-900 rounded-xl shadow-xs border border-slate-200 dark:border-slate-800 p-6 space-y-4">
+            <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">
               Future Feature Roadmap
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {FUTURE_FEATURES.map((feature) => (
                 <div
                   key={feature.id}
-                  className="border border-slate-200 rounded-lg p-4 bg-slate-50 opacity-80"
+                  className="border border-slate-200 dark:border-slate-800 rounded-lg p-4 bg-slate-50/70 dark:bg-slate-800/40"
                 >
-                  <div className="mb-3 p-2 bg-indigo-50 dark:bg-indigo-950/40 w-fit rounded-lg">
+                  <div className="mb-2 p-2 bg-indigo-50 dark:bg-indigo-950/60 w-fit rounded-lg">
                     {getFeatureIcon(feature.id)}
                   </div>
-                  <h3 className="font-semibold text-slate-700 mb-1">
+                  <h3 className="font-bold text-xs text-slate-800 dark:text-slate-200 mb-1">
                     {feature.title}
                   </h3>
-                  <p className="text-sm text-slate-500 mb-3">
+                  <p className="text-xs text-slate-500 mb-2 leading-relaxed">
                     {feature.description}
                   </p>
-                  <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-200 text-gray-700">
-                    Planned future feature — not implemented in this prototype.
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-slate-300">
+                    Planned future feature — not implemented in prototype.
                   </span>
                 </div>
               ))}
             </div>
-            <p className="mt-4 text-sm text-slate-500 italic">
-              Note: These features represent the extended vision of StudyFlow
-              but are beyond the scope of the current prototype.
-            </p>
           </section>
         )}
-
-        <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <h2 className="text-xl font-semibold text-slate-800 mb-4">
-            Presentation Demo Sequence (3-5 mins)
-          </h2>
-          <ol className="list-decimal list-inside space-y-2 text-slate-700 text-sm">
-            <li>
-              <span className="font-semibold">Open the dashboard</span>{" "}
-              (/dashboard) to view materials, deadlines, and AI literacy tip.
-            </li>
-            <li>
-              <span className="font-semibold">
-                Open "Photosynthesis Activity"
-              </span>{" "}
-              to examine instructions and current task.
-            </li>
-            <li>
-              <span className="font-semibold">Open the Task Companion</span>{" "}
-              chat interface.
-            </li>
-            <li>
-              <span className="font-semibold">Select Guide mode</span> from the
-              assistance mode chips.
-            </li>
-            <li>
-              <span className="font-semibold">Send:</span> "Give me a hint
-              without giving me the complete answer."
-            </li>
-            <li>
-              <span className="font-semibold">Show the Gemini response</span>{" "}
-              with key points, verification question, and next step.
-            </li>
-            <li>
-              <span className="font-semibold">
-                Select "Explain this more simply"
-              </span>{" "}
-              from the follow-up buttons.
-            </li>
-            <li>
-              <span className="font-semibold">Show the follow-up response</span>{" "}
-              generated in the same task context.
-            </li>
-            <li>
-              <span className="font-semibold">Select "Save response"</span> to
-              trigger the review checkpoint.
-            </li>
-            <li>
-              <span className="font-semibold">
-                Answer the cognitive scaffolding questions
-              </span>{" "}
-              (main idea, verification, own words).
-            </li>
-            <li>
-              <span className="font-semibold">
-                Save and review the AI Learning Receipt
-              </span>{" "}
-              modal.
-            </li>
-            <li>
-              <span className="font-semibold">
-                Open "Academic Stress Handout"
-              </span>{" "}
-              from materials.
-            </li>
-            <li>
-              <span className="font-semibold">Ask:</span> "Help me identify the
-              main ideas and what I should verify."
-            </li>
-            <li>
-              <span className="font-semibold">
-                Switch the prototype to local fallback mode
-              </span>{" "}
-              in Prototype Controls.
-            </li>
-            <li>
-              <span className="font-semibold">Send another request</span> in the
-              Task Companion.
-            </li>
-            <li>
-              <span className="font-semibold">
-                Show that the application still provides
-              </span>{" "}
-              a relevant structured local template with warning notice.
-            </li>
-            <li>
-              <span className="font-semibold">
-                Open the future-feature roadmap
-              </span>{" "}
-              to discuss future work (OCR, upload, calendar, Supabase).
-            </li>
-          </ol>
-        </section>
       </div>
     </AppShell>
   );

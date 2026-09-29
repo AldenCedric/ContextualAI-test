@@ -4,7 +4,16 @@ import { use, useState, useEffect } from "react";
 import AppShell from "@/components/AppShell";
 import { mockMaterials as MATERIALS } from "@/lib/mock-data";
 import Link from "next/link";
-import { ClipboardList, Check, ArrowLeft } from "lucide-react";
+import {
+  ClipboardList,
+  Check,
+  ArrowLeft,
+  BookOpen,
+  FileEdit,
+  Bot,
+  ArrowRight,
+  Info,
+} from "lucide-react";
 
 export default function MaterialDetailPage({
   params,
@@ -15,6 +24,7 @@ export default function MaterialDetailPage({
   const initialMaterial = MATERIALS.find((m) => m.id === materialId);
 
   const [progress, setProgress] = useState(initialMaterial?.progress || 0);
+  const [studentAnswer, setStudentAnswer] = useState("");
   const [notes, setNotes] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
   const [showSavedAssistance, setShowSavedAssistance] = useState(false);
@@ -24,11 +34,26 @@ export default function MaterialDetailPage({
     if (savedNotes) {
       setNotes(savedNotes);
     }
+    const savedAnswer = localStorage.getItem(
+      `studyflow-student-answer-${materialId}`,
+    );
+    if (savedAnswer) {
+      setStudentAnswer(savedAnswer);
+    }
   }, [materialId]);
+
+  const handleSaveAnswer = () => {
+    localStorage.setItem(
+      `studyflow-student-answer-${materialId}`,
+      studentAnswer,
+    );
+    setSaveStatus("Answer saved!");
+    setTimeout(() => setSaveStatus(""), 2500);
+  };
 
   const handleSaveNotes = () => {
     localStorage.setItem(`studyflow-notes-${materialId}`, notes);
-    setSaveStatus("Saved!");
+    setSaveStatus("Notes saved!");
     setTimeout(() => setSaveStatus(""), 2000);
   };
 
@@ -57,36 +82,37 @@ export default function MaterialDetailPage({
   const getTypeColor = (type: string) => {
     switch (type) {
       case "Activity":
-        return "bg-indigo-100 text-indigo-800";
+        return "bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300";
       case "Handout":
-        return "bg-emerald-100 text-emerald-800";
+        return "bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300";
       case "Problem Set":
-        return "bg-amber-100 text-amber-800";
+        return "bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300";
       case "Presentation":
-        return "bg-purple-100 text-purple-800";
+        return "bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300";
+      case "Reflection Paper":
+        return "bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300";
       case "Research Activity":
-        return "bg-cyan-100 text-cyan-800";
+        return "bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300";
+      case "Worksheet":
+        return "bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300";
+      case "Group Project":
+        return "bg-orange-100 dark:bg-orange-950 text-orange-800 dark:text-orange-300";
       case "Assignment":
-        return "bg-pink-100 text-pink-800";
-      case "Reading":
-        return "bg-blue-100 text-blue-800";
-      case "Project":
-        return "bg-orange-100 text-orange-800";
+        return "bg-pink-100 dark:bg-pink-950 text-pink-800 dark:text-pink-300";
       default:
-        return "bg-gray-100 text-gray-800";
+        return "bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300";
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "completed":
-        return "bg-green-100 text-green-800 border-green-200";
+        return "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300 border-green-200";
       case "in-progress":
-        return "bg-blue-100 text-blue-800 border-blue-200";
+        return "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-200";
       case "not-started":
-        return "bg-gray-100 text-gray-800 border-gray-200";
       default:
-        return "bg-gray-100 text-gray-800 border-gray-200";
+        return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-gray-200";
     }
   };
 
@@ -102,148 +128,200 @@ export default function MaterialDetailPage({
         </Link>
 
         {/* Material Header */}
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className="flex items-center gap-3 flex-wrap">
             <span
-              className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getTypeColor(initialMaterial.type)}`}
+              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${getTypeColor(initialMaterial.type)}`}
             >
               {initialMaterial.type}
             </span>
             <span
-              className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(initialMaterial.status)}`}
+              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(initialMaterial.status)}`}
             >
               {initialMaterial.status.replace("-", " ")}
             </span>
+            {initialMaterial.deadline && (
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                Deadline:{" "}
+                {new Date(initialMaterial.deadline).toLocaleDateString()}
+              </span>
+            )}
           </div>
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white">
             {initialMaterial.title}
           </h1>
-          {initialMaterial.deadline && (
-            <p className="text-gray-600 dark:text-gray-300">
-              <span className="font-medium">Deadline:</span>{" "}
-              {new Date(initialMaterial.deadline).toLocaleDateString()}
-            </p>
-          )}
+          <p className="text-sm text-gray-600 dark:text-gray-300 max-w-3xl">
+            {initialMaterial.description}
+          </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Content Column */}
-          <div className="lg:col-span-2 space-y-8">
-            {/* Instructions/Description Card */}
-            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-6">
-              <div className="flex items-center gap-2 mb-4 text-xl font-semibold text-gray-900 dark:text-white">
-                <ClipboardList className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />{" "}
-                Instructions & Description
+          {/* Main Column */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Instructions Card */}
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xs border border-gray-200 dark:border-gray-800 p-6 space-y-3">
+              <div className="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white">
+                <ClipboardList className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                <span>Instructions & Guidelines</span>
               </div>
-              <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                {initialMaterial.description}
+              <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
+                {initialMaterial.instructions || initialMaterial.description}
               </p>
             </div>
 
-            {/* Current Task Card */}
-            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                Current Task
-              </h3>
-              <p className="text-indigo-600 dark:text-indigo-400 font-medium mb-4">
-                {initialMaterial.currentTask}
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                This is your next recommended step.
-              </p>
+            {/* Content Preview Card */}
+            {initialMaterial.content && (
+              <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xs border border-gray-200 dark:border-gray-800 p-6 space-y-3">
+                <div className="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white">
+                  <BookOpen className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                  <span>Content Preview</span>
+                </div>
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 font-mono whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto">
+                  {initialMaterial.content}
+                </div>
+              </div>
+            )}
+
+            {/* Student Answer Field (Mandatory Thesis Requirement) */}
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xs border border-gray-200 dark:border-gray-800 p-6 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white">
+                  <FileEdit className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                  <span>My Draft Answer</span>
+                </div>
+                <span className="text-xs text-gray-500">
+                  {studentAnswer.trim()
+                    ? `${studentAnswer.trim().split(/\s+/).filter(Boolean).length} words`
+                    : "No draft entered"}
+                </span>
+              </div>
+
+              {!studentAnswer.trim() && (
+                <div className="p-3 bg-indigo-50/70 dark:bg-indigo-950/40 rounded-lg border border-indigo-100 dark:border-indigo-900/50 flex items-start gap-2 text-xs text-indigo-800 dark:text-indigo-200">
+                  <Info className="w-4 h-4 text-indigo-600 mt-0.5 flex-shrink-0" />
+                  <span>
+                    No answer submitted yet. You can ask the AI to explain the
+                    instructions or guide you through the first question.
+                  </span>
+                </div>
+              )}
+
+              <textarea
+                value={studentAnswer}
+                onChange={(e) => setStudentAnswer(e.target.value)}
+                placeholder="Draft or paste your actual response, calculations, or argument here before requesting review..."
+                rows={5}
+                className="w-full p-3.5 border border-gray-300 dark:border-gray-700 rounded-lg shadow-2xs text-xs sm:text-sm text-gray-900 dark:text-gray-100 dark:bg-gray-800 focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+              />
+
+              <div className="flex items-center justify-between pt-1">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleSaveAnswer}
+                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-2xs"
+                  >
+                    Save Draft Answer
+                  </button>
+                  {saveStatus && (
+                    <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                      {saveStatus}
+                    </span>
+                  )}
+                </div>
+
+                <Link
+                  href={`/materials/${materialId}/chat?mode=review`}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                >
+                  <span>Review with AI</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
             </div>
 
-            {/* Student Notes Area */}
-            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                My Notes
+            {/* Student Personal Notes */}
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xs border border-gray-200 dark:border-gray-800 p-6 space-y-3">
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+                Personal Study Notes
               </h3>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Jot down ideas, answers, or questions here..."
-                className="w-full h-40 p-4 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white resize-none"
+                placeholder="Jot down quick reminders, questions for office hours, or references..."
+                rows={3}
+                className="w-full p-3 border border-gray-300 rounded-lg text-xs text-gray-900 dark:text-white dark:bg-gray-800 dark:border-gray-700"
               />
-              <div className="mt-4 flex items-center gap-4">
-                <button
-                  onClick={handleSaveNotes}
-                  className="px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 rounded-lg font-medium transition-colors"
-                >
-                  Save Notes
-                </button>
-                {saveStatus && (
-                  <span className="text-sm text-green-600 dark:text-green-400">
-                    {saveStatus}
-                  </span>
-                )}
-              </div>
+              <button
+                type="button"
+                onClick={handleSaveNotes}
+                className="px-3 py-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 text-xs rounded font-medium"
+              >
+                Save Notes
+              </button>
             </div>
           </div>
 
           {/* Sidebar Column */}
-          <div className="space-y-8">
+          <div className="space-y-6">
             {/* Suggested Next Action */}
-            <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-xl p-6">
-              <h3 className="text-lg font-bold text-indigo-900 dark:text-indigo-100 mb-2">
+            <div className="bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 rounded-xl p-6 space-y-3">
+              <h3 className="text-base font-bold text-indigo-900 dark:text-indigo-100">
                 Suggested Next Action
               </h3>
-              <p className="text-indigo-700 dark:text-indigo-300 mb-6 text-sm">
-                Get help with:{" "}
-                <span className="font-semibold">
-                  {initialMaterial.currentTask}
-                </span>
+              <p className="text-xs text-indigo-700 dark:text-indigo-300 leading-relaxed">
+                {initialMaterial.currentTask || initialMaterial.description}
               </p>
               <Link
                 href={`/materials/${materialId}/chat`}
-                className="block w-full text-center px-4 py-3 border border-transparent rounded-lg shadow-sm text-base font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
+                className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-sm"
               >
-                Open Task Companion
+                <Bot className="w-4 h-4" />
+                <span>Open Task Companion</span>
               </Link>
             </div>
 
             {/* Progress Section */}
-            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                Progress
-              </h3>
-              <div className="space-y-2 mb-6">
-                <div className="flex justify-between text-sm font-medium text-gray-700 dark:text-gray-300">
-                  <span>Completion</span>
-                  <span>{progress}%</span>
-                </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
-                  <div
-                    className="bg-indigo-600 h-3 rounded-full transition-all duration-500"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xs border border-gray-200 dark:border-gray-800 p-6 space-y-4">
+              <div className="flex justify-between items-center text-sm font-semibold text-gray-900 dark:text-white">
+                <span>Completion</span>
+                <span>{progress}%</span>
+              </div>
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                <div
+                  className="bg-indigo-600 h-2.5 rounded-full transition-all duration-500"
+                  style={{ width: `${progress}%` }}
+                />
               </div>
               <button
+                type="button"
                 onClick={handleMarkProgress}
                 disabled={progress >= 100}
-                className="w-full px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 text-xs rounded-lg font-medium disabled:opacity-50"
               >
                 Mark Progress (+20%)
               </button>
             </div>
 
             {/* Action Buttons */}
-            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-6 space-y-3">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                Actions
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xs border border-gray-200 dark:border-gray-800 p-6 space-y-3">
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider text-[11px]">
+                Quick Actions
               </h3>
               <Link
                 href={`/materials/${materialId}/chat?mode=review`}
-                className="block w-full px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 rounded-lg font-medium transition-colors text-left"
+                className="block w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800/80 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors border border-slate-200 dark:border-slate-700"
               >
-                Review My Work (with AI)
+                Review My Answer (with AI)
               </Link>
+
               <button
+                type="button"
                 onClick={() => setShowSavedAssistance(!showSavedAssistance)}
-                className="w-full px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 rounded-lg font-medium transition-colors text-left flex justify-between items-center"
+                className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors border border-slate-200 dark:border-slate-700 flex justify-between items-center"
               >
                 <span>View Saved AI Assistance</span>
-                <span className="text-xs bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-300 px-2 py-0.5 rounded-full">
+                <span className="text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full">
                   {(() => {
                     try {
                       const all = JSON.parse(
@@ -258,8 +336,9 @@ export default function MaterialDetailPage({
                   })()}
                 </span>
               </button>
+
               {showSavedAssistance && (
-                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg text-sm text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 space-y-3 max-h-80 overflow-y-auto">
+                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg text-xs text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 space-y-2 max-h-60 overflow-y-auto">
                   {(() => {
                     try {
                       const all = JSON.parse(
@@ -272,54 +351,48 @@ export default function MaterialDetailPage({
                       if (items.length === 0) {
                         return (
                           <p className="italic">
-                            No saved assistance yet. Use the Task Companion to
-                            generate and save responses!
+                            No saved assistance records yet.
                           </p>
                         );
                       }
                       return items.map((item: any) => (
                         <div
                           key={item.id}
-                          className="p-3 bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-800 space-y-1 text-xs"
+                          className="p-2.5 bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-800 space-y-1"
                         >
-                          <div className="flex justify-between items-center font-medium text-gray-900 dark:text-gray-100">
-                            <span className="capitalize font-semibold text-indigo-600 dark:text-indigo-400">
+                          <div className="flex justify-between items-center font-semibold text-indigo-600 dark:text-indigo-400">
+                            <span className="capitalize">
                               {item.assistanceMode} Mode
                             </span>
-                            <span className="text-gray-400">
+                            <span className="text-[10px] text-gray-400">
                               {new Date(item.savedAt).toLocaleDateString()}
                             </span>
                           </div>
-                          <p className="text-gray-700 dark:text-gray-300 line-clamp-2">
-                            {item.responseData?.response ||
-                              "No response content"}
+                          <p className="line-clamp-2 text-slate-700 dark:text-slate-300">
+                            {item.responseData?.directResponse ||
+                              item.responseData?.response ||
+                              "No content"}
                           </p>
-                          {item.reviewAnswers && (
-                            <div className="pt-1 border-t border-gray-100 dark:border-gray-800 text-[11px] text-gray-500">
-                              <span className="font-medium text-emerald-600">
-                                Reviewed:{" "}
-                              </span>
-                              {item.reviewAnswers.mainIdea || "Verified"}
-                            </div>
-                          )}
                         </div>
                       ));
                     } catch {
-                      return <p className="italic">No saved assistance yet.</p>;
+                      return <p className="italic">No records available.</p>;
                     }
                   })()}
                 </div>
               )}
+
               <button
+                type="button"
                 onClick={() => setProgress(100)}
                 disabled={progress >= 100}
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg font-medium transition-colors text-left mt-2 disabled:opacity-50 flex items-center justify-between"
+                className="w-full px-3.5 py-2 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg text-xs font-semibold transition-colors flex items-center justify-between disabled:opacity-50"
               >
                 <span>
                   {progress >= 100 ? "Completed" : "Mark as Complete"}
                 </span>
                 {progress >= 100 && (
-                  <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
                 )}
               </button>
             </div>
@@ -327,9 +400,9 @@ export default function MaterialDetailPage({
         </div>
 
         {/* Footer Note */}
-        <div className="mt-12 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg text-center text-sm text-gray-500 dark:text-gray-400">
-          This prototype uses sample academic materials. Future versions may
-          support uploads, document extraction, and synchronization.
+        <div className="p-4 bg-gray-50 dark:bg-gray-800/40 rounded-xl text-center text-xs text-gray-500 dark:text-gray-400">
+          This prototype uses sample university materials. Future versions may
+          support direct classroom LMS integration and cloud syncing.
         </div>
       </div>
     </AppShell>
