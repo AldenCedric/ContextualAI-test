@@ -11,6 +11,7 @@ import {
   Material,
 } from "@/lib/types";
 import { classNames, generateId } from "@/lib/utils";
+import { GEMINI_MODEL_LABEL } from "@/lib/constants";
 import { usePrototype } from "@/lib/prototype-context";
 import { parseAcademicDocument, ParsedDocument } from "@/lib/document-parser";
 import {
@@ -1031,7 +1032,7 @@ export default function TaskCompanion({
         {/* Input Footer Indicator */}
         <div className="flex justify-between items-center text-[10px] text-slate-500 dark:text-slate-400 px-1">
           <span>
-            {selectedMaterial.title} • {mode} mode • Gemini 2.0 Flash
+            {selectedMaterial.title} • {mode} mode • {GEMINI_MODEL_LABEL}
           </span>
           <span>{input.length}/2000</span>
         </div>
