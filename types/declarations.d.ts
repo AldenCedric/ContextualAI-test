@@ -1,9 +1,9 @@
-declare module 'mammoth/mammoth.browser.js' {
+declare module "mammoth/mammoth.browser.js" {
   const mammoth: any;
   export default mammoth;
 }
 
-declare module 'pdf-parse' {
+declare module "pdf-parse" {
   const pdfParse: any;
   export = pdfParse;
 }

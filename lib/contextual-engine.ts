@@ -1,6 +1,6 @@
 /**
  * StudyFlow Contextual Intelligence & Document Analysis Engine
- * 
+ *
  * Thesis Core Pillars:
  * 1. Mitigating Cognitive Offloading: Refuses to complete tasks for students; provides metacognitive scaffolding.
  * 2. Grounded Document Verification: Strictly checks extracted document text for gibberish, anomalies, and academic relevance.
@@ -66,11 +66,13 @@ export function checkTextAnomalies(text: string): {
   const flagged: string[] = [];
 
   // 1. Long unpronounceable consonant sequences (e.g. "asdfghjk", "zxcvbnm", "qwrtyp")
-  const consonantClusters = text.match(/\b[bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ]{6,}\b/g);
+  const consonantClusters = text.match(
+    /\b[bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ]{6,}\b/g,
+  );
   if (consonantClusters) {
     // Filter out common acronyms/abbreviations
     const invalidClusters = consonantClusters.filter(
-      (w) => !/^(https?|xmlns|schema|rdfs?|xpath|async|mysql|pgsql)$/i.test(w)
+      (w) => !/^(https?|xmlns|schema|rdfs?|xpath|async|mysql|pgsql)$/i.test(w),
     );
     if (invalidClusters.length > 0) {
       flagged.push(...invalidClusters);
@@ -79,7 +81,7 @@ export function checkTextAnomalies(text: string): {
 
   // 2. Typical keyboard mash sequences
   const keyboardMashes = text.match(
-    /\b(asdf[a-z]*|qwerty[a-z]*|zxcv[a-z]*|lkjh[a-z]*|poiuy[a-z]*|[a-z]*asdf[a-z]*|[a-z]*qwerty[a-z]*)\b/gi
+    /\b(asdf[a-z]*|qwerty[a-z]*|zxcv[a-z]*|lkjh[a-z]*|poiuy[a-z]*|[a-z]*asdf[a-z]*|[a-z]*qwerty[a-z]*)\b/gi,
   );
   if (keyboardMashes) {
     flagged.push(...keyboardMashes);
@@ -97,11 +99,17 @@ export function checkTextAnomalies(text: string): {
   }
 
   // 5. Unusually low vowel ratio in word tokens (len >= 6 with 0 or 1 vowel)
-  const words = text.split(/[\s,.;:!?()\[\]{}"']+/).filter((w) => w.length >= 6);
+  const words = text
+    .split(/[\s,.;:!?()\[\]{}"']+/)
+    .filter((w) => w.length >= 6);
   for (const word of words) {
     const vowels = word.match(/[aeiouyAEIOUY]/g) || [];
     const vowelRatio = vowels.length / word.length;
-    if (vowelRatio < 0.15 && !/^[0-9]+$/.test(word) && !/^[A-Z0-9_-]+$/.test(word)) {
+    if (
+      vowelRatio < 0.15 &&
+      !/^[0-9]+$/.test(word) &&
+      !/^[A-Z0-9_-]+$/.test(word)
+    ) {
       if (!flagged.includes(word)) {
         flagged.push(word);
       }
@@ -128,7 +136,10 @@ export function sliceAndReconstructDocument(doc: AttachedDocInput): {
   isTruncated: boolean;
   sampleRatio: string;
 } {
-  const raw = doc.text.replace(/\r\n/g, "\n").replace(/[ \t]+/g, " ").trim();
+  const raw = doc.text
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .trim();
 
   if (raw.length <= 3500) {
     return {
@@ -166,7 +177,14 @@ export function generateContextualResponse(params: {
   message: string;
   attachedDoc?: AttachedDocInput;
 }): StructuredAIOutput {
-  const { materialTitle, materialType, currentTask, assistanceMode, message, attachedDoc } = params;
+  const {
+    materialTitle,
+    materialType,
+    currentTask,
+    assistanceMode,
+    message,
+    attachedDoc,
+  } = params;
 
   // RULE 1: Mitigating Cognitive Offloading (Thesis Requirement)
   if (isCognitiveOffloadingRequest(message)) {
@@ -183,7 +201,8 @@ Instead, let's break down "${currentTask || materialTitle}" into manageable step
         "Companion Role: Metacognitive scaffolding, guiding questions, and structural feedback",
         "Next Action: Break the task into small checkpoints and formulate your initial draft",
       ],
-      suggestedNextAction: "Write down the first 2-3 sentences of your response or outline, then ask for a review.",
+      suggestedNextAction:
+        "Write down the first 2-3 sentences of your response or outline, then ask for a review.",
       followUpActions: [
         "Help me outline this step-by-step",
         "Give me a guiding hint on the first concept",
@@ -210,7 +229,8 @@ Instead, let's break down "${currentTask || materialTitle}" into manageable step
           `Flagged anomalies: ${anomalyCheck.details}`,
           "Integrity check: Revision required before final academic submission",
         ],
-        suggestedNextAction: "Locate and remove the flagged placeholder or gibberish text in your document.",
+        suggestedNextAction:
+          "Locate and remove the flagged placeholder or gibberish text in your document.",
         followUpActions: [
           "Check document formatting",
           "Review remaining text for academic flow",
@@ -232,7 +252,8 @@ Instead, let's break down "${currentTask || materialTitle}" into manageable step
         "Academic validity: Terminology is coherent and logically structured",
         "Cleanliness: 0 gibberish, 0 unpronounceable sequences detected",
       ],
-      suggestedNextAction: "Verify your arguments and citations against the rubric before final submission.",
+      suggestedNextAction:
+        "Verify your arguments and citations against the rubric before final submission.",
       followUpActions: [
         "Create a submission checklist",
         "Review key arguments for depth",
@@ -252,14 +273,16 @@ Instead, let's break down "${currentTask || materialTitle}" into manageable step
   if (titleLower.includes("photosynthesis")) {
     if (lowerMsg.includes("hint") || assistanceMode === "guide") {
       return {
-        response: "Consider how energy moves between the two main phases: light-dependent reactions create ATP and NADPH, which then fuel the Calvin cycle. Where does glucose get assembled, and what provides the carbon backbone?",
+        response:
+          "Consider how energy moves between the two main phases: light-dependent reactions create ATP and NADPH, which then fuel the Calvin cycle. Where does glucose get assembled, and what provides the carbon backbone?",
         responseType: "guidance",
         keyPoints: [
           "Light-dependent reactions occur in thylakoid membranes to generate ATP/NADPH",
           "Calvin cycle (light-independent) fixes CO₂ in the stroma to yield glucose",
           "Water photolysis releases oxygen as a vital byproduct",
         ],
-        suggestedNextAction: "Draft a 2-sentence explanation of why glucose is considered the chemical storage of solar energy.",
+        suggestedNextAction:
+          "Draft a 2-sentence explanation of why glucose is considered the chemical storage of solar energy.",
         followUpActions: [
           "Explain the Calvin cycle simply",
           "What is the role of sunlight?",
@@ -276,14 +299,16 @@ Instead, let's break down "${currentTask || materialTitle}" into manageable step
   if (titleLower.includes("stress") || titleLower.includes("sleep")) {
     if (lowerMsg.includes("hint") || assistanceMode === "guide") {
       return {
-        response: "Notice the bidirectional relationship between academic stress and sleep architecture: elevated cortisol levels inhibit deep slow-wave sleep, which impairs cognitive memory consolidation the next morning.",
+        response:
+          "Notice the bidirectional relationship between academic stress and sleep architecture: elevated cortisol levels inhibit deep slow-wave sleep, which impairs cognitive memory consolidation the next morning.",
         responseType: "guidance",
         keyPoints: [
           "Stress triggers cortisol and autonomic arousal, disrupting REM and deep sleep",
           "Sleep deprivation elevates perceived stress, creating a compounding feedback loop",
           "Interventions targeting sleep routines significantly lower academic fatigue",
         ],
-        suggestedNextAction: "Formulate your response for Question 3 citing the cortisol-sleep feedback cycle.",
+        suggestedNextAction:
+          "Formulate your response for Question 3 citing the cortisol-sleep feedback cycle.",
         followUpActions: [
           "Explain this more simply",
           "Draft Question 3 answer",
@@ -306,7 +331,8 @@ Instead, let's break down "${currentTask || materialTitle}" into manageable step
       "Draft concise explanations in your own words",
       "Verify conclusions against foundational course materials",
     ],
-    suggestedNextAction: "Draft your initial answer and share it here for constructive feedback.",
+    suggestedNextAction:
+      "Draft your initial answer and share it here for constructive feedback.",
     followUpActions: [
       "Explain more simply",
       "Give me a guiding hint",

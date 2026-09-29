@@ -38,7 +38,7 @@ export async function parseDocumentBuffer(
     try {
       const uint8 = new Uint8Array(buffer);
       const res = await unpdfExtractText(uint8);
-      rawText = Array.isArray(res.text) ? res.text.join("\n") : (res.text || "");
+      rawText = Array.isArray(res.text) ? res.text.join("\n") : res.text || "";
     } catch (err: any) {
       console.warn("unpdf server extraction warning:", err?.message || err);
       // Fallback: decode raw stream
@@ -55,7 +55,9 @@ export async function parseDocumentBuffer(
 
   const cleanText = rawText.replace(/\r\n/g, "\n").trim();
   const rawLength = cleanText.length;
-  const wordCount = cleanText ? cleanText.split(/\s+/).filter(Boolean).length : 0;
+  const wordCount = cleanText
+    ? cleanText.split(/\s+/).filter(Boolean).length
+    : 0;
 
   if (rawLength <= maxChars) {
     return {

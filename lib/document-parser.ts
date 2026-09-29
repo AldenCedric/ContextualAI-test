@@ -121,7 +121,8 @@ async function extractTextFromPDFBytes(file: File): Promise<string> {
       return textMatches.join(" ");
     }
 
-    const readableChunks = rawString.match(/[A-Za-z0-9\s.,;:'"?!()-]{4,}/g) || [];
+    const readableChunks =
+      rawString.match(/[A-Za-z0-9\s.,;:'"?!()-]{4,}/g) || [];
     const filtered = readableChunks.filter(
       (c) =>
         !c.startsWith("obj") &&
