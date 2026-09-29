@@ -266,82 +266,187 @@ Instead, let's break down "${currentTask || materialTitle}" into manageable step
     };
   }
 
-  // RULE 3: Subject-Specific & General Academic Support
-  const lowerMsg = message.toLowerCase();
-  const titleLower = materialTitle.toLowerCase();
+  // RULE 3: Dynamic Contextual Response Generation
+  // No hardcoded subject branches — all responses derived from inputs.
+  const keywords = extractKeywords(message);
+  return buildModeScaffolding(assistanceMode, {
+    materialTitle,
+    materialType,
+    currentTask,
+    keywords,
+  });
+}
 
-  if (titleLower.includes("photosynthesis")) {
-    if (lowerMsg.includes("hint") || assistanceMode === "guide") {
-      return {
-        response:
-          "Consider how energy moves between the two main phases: light-dependent reactions create ATP and NADPH, which then fuel the Calvin cycle. Where does glucose get assembled, and what provides the carbon backbone?",
-        responseType: "guidance",
-        keyPoints: [
-          "Light-dependent reactions occur in thylakoid membranes to generate ATP/NADPH",
-          "Calvin cycle (light-independent) fixes CO₂ in the stroma to yield glucose",
-          "Water photolysis releases oxygen as a vital byproduct",
-        ],
-        suggestedNextAction:
-          "Draft a 2-sentence explanation of why glucose is considered the chemical storage of solar energy.",
-        followUpActions: [
-          "Explain the Calvin cycle simply",
-          "What is the role of sunlight?",
-        ],
-        verificationQuestions: [
-          "Can you explain the difference between the light reactions and the dark reactions in your own words?",
-        ],
-        uncertainties: [],
-        requiresReview: false,
-      };
-    }
-  }
+/**
+ * Extracts meaningful academic keywords from a student message.
+ * Used to personalize fallback responses without an LLM.
+ */
+function extractKeywords(message: string): string[] {
+  if (!message) return [];
+  const stopWords = new Set([
+    "the", "a", "an", "is", "are", "was", "were", "be", "been",
+    "being", "have", "has", "had", "do", "does", "did", "will",
+    "would", "could", "should", "may", "might", "shall", "can",
+    "to", "of", "in", "for", "on", "with", "at", "by", "from",
+    "this", "that", "these", "those", "it", "its", "my", "me",
+    "i", "you", "your", "we", "our", "they", "them", "their",
+    "what", "which", "who", "whom", "how", "why", "when", "where",
+    "about", "into", "through", "during", "before", "after",
+    "and", "but", "or", "nor", "not", "no", "so", "if", "then",
+    "than", "too", "very", "just", "more", "most", "also",
+    "help", "please", "give", "tell", "show", "explain", "make",
+  ]);
 
-  if (titleLower.includes("stress") || titleLower.includes("sleep")) {
-    if (lowerMsg.includes("hint") || assistanceMode === "guide") {
-      return {
-        response:
-          "Notice the bidirectional relationship between academic stress and sleep architecture: elevated cortisol levels inhibit deep slow-wave sleep, which impairs cognitive memory consolidation the next morning.",
-        responseType: "guidance",
-        keyPoints: [
-          "Stress triggers cortisol and autonomic arousal, disrupting REM and deep sleep",
-          "Sleep deprivation elevates perceived stress, creating a compounding feedback loop",
-          "Interventions targeting sleep routines significantly lower academic fatigue",
-        ],
-        suggestedNextAction:
-          "Formulate your response for Question 3 citing the cortisol-sleep feedback cycle.",
-        followUpActions: [
-          "Explain this more simply",
-          "Draft Question 3 answer",
-        ],
-        verificationQuestions: [
-          "Does your answer address both the biological and psychological aspects mentioned in the handout?",
-        ],
-        uncertainties: [],
-        requiresReview: false,
-      };
-    }
-  }
+  return message
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .split(/\s+/)
+    .filter((w) => w.length >= 3 && !stopWords.has(w))
+    .slice(0, 8);
+}
 
-  // Default Guidance with Metacognitive Scaffolding
-  return {
-    response: `To tackle "${currentTask || materialTitle}", focus on identifying the core argument and supporting it with evidence. Break down the requirements into manageable steps, draft your initial explanation, and review it against course guidelines.`,
-    responseType: "guidance",
-    keyPoints: [
-      "Center your work on the primary learning objective",
-      "Draft concise explanations in your own words",
-      "Verify conclusions against foundational course materials",
-    ],
-    suggestedNextAction:
-      "Draft your initial answer and share it here for constructive feedback.",
-    followUpActions: [
-      "Explain more simply",
-      "Give me a guiding hint",
-      "Create a quick checklist",
-    ],
-    verificationQuestions: [
-      "Does your draft directly answer the core prompt asked by your instructor?",
-    ],
-    uncertainties: [],
-    requiresReview: false,
+interface ScaffoldingContext {
+  materialTitle: string;
+  materialType: string;
+  currentTask: string;
+  keywords: string[];
+}
+
+function buildModeScaffolding(
+  mode: string,
+  ctx: ScaffoldingContext,
+): StructuredAIOutput {
+  const { materialTitle, materialType, currentTask, keywords } = ctx;
+  const topicPhrase =
+    keywords.length > 0
+      ? keywords.slice(0, 3).join(", ")
+      : currentTask || materialTitle || "your coursework";
+
+  const cleanType = (materialType || "activity").toLowerCase();
+
+  const strategies: Record<string, () => StructuredAIOutput> = {
+    explain: () => ({
+      response: `Let's break down the key concepts related to ${topicPhrase} in "${materialTitle}". Start by identifying the central idea — what is the main claim or process being described? Then examine how the supporting details (definitions, examples, evidence) connect to that central idea. Try restating the concept in your own words to test your understanding.`,
+      responseType: "explanation",
+      keyPoints: [
+        `Focus on understanding the core mechanism or argument in ${materialTitle}`,
+        `Identify how ${topicPhrase} relates to the broader topic`,
+        "Restate the concept in your own words before moving on",
+      ],
+      suggestedNextAction: `Write a one-sentence summary of ${topicPhrase} in your own words.`,
+      followUpActions: [
+        `What are the key terms related to ${topicPhrase}?`,
+        "Can you give me a simpler analogy?",
+        "What should I verify in my understanding?",
+      ],
+      verificationQuestions: [
+        `Can you explain ${topicPhrase} to a classmate without looking at your notes?`,
+      ],
+      uncertainties: [],
+      requiresReview: false,
+    }),
+    guide: () => ({
+      response: `Here's a guiding direction for "${currentTask || materialTitle}": Consider what the ${cleanType} is asking you to demonstrate. The key area to investigate is ${topicPhrase}. Rather than jumping to the answer, ask yourself: what foundational concept must be true for this to work? Start there and build outward.`,
+      responseType: "guidance",
+      keyPoints: [
+        `The core concept to investigate is ${topicPhrase}`,
+        "Think about prerequisites — what must you understand first?",
+        "Build your answer step-by-step from fundamentals",
+      ],
+      suggestedNextAction: `Identify the single most important concept underlying ${topicPhrase} and write it down.`,
+      followUpActions: [
+        "Give me another hint",
+        "What is the first step I should take?",
+        "Help me check my reasoning",
+      ],
+      verificationQuestions: [
+        `What evidence from your ${cleanType} supports your understanding of ${topicPhrase}?`,
+      ],
+      uncertainties: [],
+      requiresReview: false,
+    }),
+    organize: () => ({
+      response: `Here's a structured approach to tackle "${currentTask || materialTitle}":\n1. **Read and identify requirements** — What specifically does the ${cleanType} ask you to produce?\n2. **List key concepts** — What topics related to ${topicPhrase} need to be addressed?\n3. **Draft your response** — Write a rough version addressing each requirement.\n4. **Cross-check** — Compare your draft against the original instructions.\n5. **Refine** — Improve clarity and add evidence where needed.`,
+      responseType: "checklist",
+      keyPoints: [
+        "Break complex tasks into sequential checkpoints",
+        `Ensure each section addresses ${topicPhrase} directly`,
+        "Cross-reference your work against the original requirements",
+      ],
+      suggestedNextAction: "Complete step 1: list all requirements from the instructions.",
+      followUpActions: [
+        "Help me with step 2",
+        "Create a timeline for these steps",
+        "What should I prioritize first?",
+      ],
+      verificationQuestions: [
+        "Have you addressed every requirement listed in the original instructions?",
+      ],
+      uncertainties: [],
+      requiresReview: false,
+    }),
+    explore: () => ({
+      response: `To deepen your understanding of ${topicPhrase} in "${materialTitle}", try exploring these angles:\n• Search for "${keywords.slice(0, 2).join(" ")} ${cleanType} examples" for practical context\n• Look up related concepts that connect to ${topicPhrase}\n• Find one peer-reviewed or textbook source that discusses this topic from a different perspective`,
+      responseType: "search_plan",
+      keyPoints: [
+        `Explore ${topicPhrase} from multiple academic perspectives`,
+        "Look for practical examples and case studies",
+        "Cross-reference with your textbook or lecture notes",
+      ],
+      suggestedNextAction: `Search for one additional source that explains ${topicPhrase} and note how it differs from your material.`,
+      followUpActions: [
+        "Suggest more specific search terms",
+        "What related concepts should I explore?",
+        "Help me evaluate a source I found",
+      ],
+      verificationQuestions: [
+        "How does what you found align with or differ from your course material?",
+      ],
+      uncertainties: [],
+      requiresReview: false,
+    }),
+    review: () => ({
+      response: `To review your work on "${currentTask || materialTitle}", check these dimensions:\n• **Completeness** — Does your response address all parts of the ${cleanType}?\n• **Accuracy** — Are the claims about ${topicPhrase} supported by evidence?\n• **Clarity** — Could a classmate understand your explanation without additional context?\n• **Originality** — Is the work in your own words and reasoning?`,
+      responseType: "feedback",
+      keyPoints: [
+        "Check that every requirement from the instructions is addressed",
+        `Verify that claims about ${topicPhrase} are evidence-based`,
+        "Ensure your language is clear and your reasoning is original",
+      ],
+      suggestedNextAction: "Re-read your draft and mark any section where you're unsure of accuracy.",
+      followUpActions: [
+        "Check my specific answer",
+        "What am I missing?",
+        "How can I strengthen my argument?",
+      ],
+      verificationQuestions: [
+        "If your instructor asked you to defend this answer, what evidence would you cite?",
+      ],
+      uncertainties: [],
+      requiresReview: false,
+    }),
+    draft: () => ({
+      response: `Here's a preliminary framework for approaching "${currentTask || materialTitle}":\n\n**Working Title/Focus:** ${topicPhrase}\n\n**Suggested Structure:**\n1. Introduction — State the purpose and scope related to ${topicPhrase}\n2. Key Analysis — Address the main concepts the ${cleanType} requires\n3. Evidence/Examples — Support your points with specific references\n4. Conclusion — Summarize your findings and state what you learned\n\n*This is a preliminary AI-assisted framework — review required before academic use.*`,
+      responseType: "draft",
+      keyPoints: [
+        "This framework should be adapted to your specific requirements",
+        `Center your analysis on ${topicPhrase}`,
+        "Add your own evidence, examples, and voice",
+      ],
+      suggestedNextAction: "Fill in section 1 with your own introduction and thesis statement.",
+      followUpActions: [
+        "Help me develop section 2",
+        "Review my filled-in draft",
+        "Suggest evidence I should look for",
+      ],
+      verificationQuestions: [
+        "Does this framework cover all the requirements in your assignment instructions?",
+      ],
+      uncertainties: ["This is a structural scaffold — all content should be your own."],
+      requiresReview: true,
+    }),
   };
+
+  const strategy = strategies[mode] || strategies.guide;
+  return strategy();
 }
