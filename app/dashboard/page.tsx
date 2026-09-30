@@ -1,332 +1,432 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import AppShell from "@/components/AppShell";
-import { mockMaterials as MATERIALS } from "@/lib/mock-data";
 import { usePrototype } from "@/lib/prototype-context";
 import {
-  Lightbulb,
-  FilePlus,
+  SUBJECTS,
+  getTasksForSubject,
+  ASSISTANCE_MODES,
+} from "@/lib/study-data";
+import { parseAcademicDocument } from "@/lib/document-parser";
+import type { Subject, PreloadedTask, CustomDocument } from "@/lib/types";
+import { useRef, useState } from "react";
+import {
   BookOpen,
-  Bot,
-  RefreshCw,
-  Languages,
+  Upload,
+  ChevronRight,
+  FileText,
+  AlertCircle,
+  GraduationCap,
+  Lightbulb,
+  Compass,
+  ClipboardCheck,
+  MessageSquare,
+  CheckCircle2,
+  ArrowRight,
 } from "lucide-react";
 
 export default function DashboardPage() {
-  const [greeting, setGreeting] = useState("Good day");
-  const { currentMode, languageMode, setLanguageMode } = usePrototype();
+  const router = useRouter();
+  const {
+    selectedSubject,
+    setSelectedSubject,
+    selectedTask,
+    setSelectedTask,
+    customDocument,
+    setCustomDocument,
+    assistanceMode,
+    setAssistanceMode,
+    settings,
+  } = usePrototype();
 
-  useEffect(() => {
-    const hour = new Date().getHours();
-    if (hour < 12) setGreeting("Good morning");
-    else if (hour < 18) setGreeting("Good afternoon");
-    else setGreeting("Good evening");
-  }, []);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [editableText, setEditableText] = useState("");
 
-  const getStatusColor = () => {
-    switch (currentMode) {
-      case "primary":
-        return "bg-green-500";
-      case "fallback-1":
-      case "fallback-2":
-        return "bg-yellow-500";
-      case "local":
-        return "bg-red-500";
-      default:
-        return "bg-green-500";
+  const tasks =
+    selectedSubject && selectedSubject.id !== "custom"
+      ? getTasksForSubject(selectedSubject.id)
+      : [];
+
+  const handleSubjectSelect = (s: Subject) => {
+    setSelectedSubject(s);
+    setSelectedTask(null);
+    setCustomDocument(null);
+    setUploadError(null);
+    setEditableText("");
+  };
+
+  const handleTaskSelect = (t: PreloadedTask) => {
+    setSelectedTask(t);
+    setCustomDocument(null);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadError(null);
+    setIsUploading(true);
+
+    try {
+      const parsed = await parseAcademicDocument(file);
+      if (!parsed.text || parsed.text.trim().length < 10) {
+        setUploadError(
+          "We could not reliably read this file. You may paste the relevant content manually.",
+        );
+        setCustomDocument({
+          fileName: file.name,
+          fileType: file.name.split(".").pop() || "unknown",
+          extractedText: "",
+          parseStatus: "failed",
+        });
+        setEditableText("");
+      } else {
+        const doc: CustomDocument = {
+          fileName: file.name,
+          fileType: file.name.split(".").pop() || "unknown",
+          extractedText: parsed.text,
+          parseStatus: "readable",
+        };
+        setCustomDocument(doc);
+        setEditableText(parsed.text);
+      }
+    } catch {
+      setUploadError(
+        "We could not reliably read this file. You may paste the relevant content manually.",
+      );
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
-  const getStatusText = () => {
-    switch (currentMode) {
-      case "primary":
-        return "Gemini Live";
-      case "fallback-1":
-      case "fallback-2":
-        return "Gemini Backup";
-      case "local":
-        return "Local Fallback";
-      default:
-        return "Gemini Live";
+  const handleEditableTextChange = (text: string) => {
+    setEditableText(text);
+    if (customDocument) {
+      setCustomDocument({
+        ...customDocument,
+        extractedText: text,
+        parseStatus: text.trim().length > 10 ? "readable" : "failed",
+      });
     }
   };
 
-  const upcomingMaterials = [...MATERIALS]
-    .filter((m) => m.deadline)
-    .sort(
-      (a, b) =>
-        new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime(),
-    )
-    .slice(0, 4);
+  const canProceed =
+    selectedSubject &&
+    (selectedTask ||
+      (selectedSubject.id === "custom" && customDocument?.extractedText));
 
-  const recentMaterials = MATERIALS.slice(0, 3);
+  const modeIcons = {
+    explain: Lightbulb,
+    guide: Compass,
+    review: ClipboardCheck,
+  };
+
+  const statusColor =
+    settings.serviceMode === "primary"
+      ? "bg-green-500"
+      : settings.serviceMode === "local"
+        ? "bg-red-500"
+        : "bg-yellow-500";
+
+  const statusLabel =
+    settings.serviceMode === "primary"
+      ? "Live AI"
+      : settings.serviceMode === "local"
+        ? "Local Fallback"
+        : "Backup AI";
 
   return (
     <AppShell>
-      <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-8">
-        {/* 1. Greeting Section */}
-        <div className="space-y-2">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                {greeting}, Student
-              </h1>
-              <p className="text-base text-gray-600 dark:text-gray-300 mt-1">
-                From academic material to manageable next steps—with AI
-                assistance you can review and control.
-              </p>
-            </div>
-
-            {/* Language Selector Box */}
-            <div className="bg-white dark:bg-gray-800 p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-2xs space-y-1 self-start sm:self-auto">
-              <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                <Languages className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Language Preference:</span>
-              </div>
-              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-lg text-xs">
-                <button
-                  type="button"
-                  onClick={() => setLanguageMode("english")}
-                  className={`px-2.5 py-1 rounded font-medium transition-colors ${
-                    languageMode === "english"
-                      ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 font-bold shadow-2xs"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
-                  }`}
-                >
-                  English
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLanguageMode("filipino")}
-                  className={`px-2.5 py-1 rounded font-medium transition-colors ${
-                    languageMode === "filipino"
-                      ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 font-bold shadow-2xs"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
-                  }`}
-                >
-                  Filipino
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLanguageMode("taglish")}
-                  title="Taglish — Tagalog-English code-switching"
-                  className={`px-2.5 py-1 rounded font-medium transition-colors ${
-                    languageMode === "taglish"
-                      ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 font-bold shadow-2xs"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
-                  }`}
-                >
-                  Taglish
-                </button>
-              </div>
-            </div>
-          </div>
+      <div className="space-y-8">
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">
+            StudyFlow Dashboard
+          </h1>
+          <p className="text-muted mt-1">
+            Select a subject and task, then open the contextual chat to receive
+            guided academic assistance.
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="md:col-span-2 space-y-6">
-            {/* 2. Today's Next Step Card */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-xs border-l-4 border-indigo-600 hover:shadow-md transition-shadow">
-              <h2 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">
-                Today's Recommended Step
-              </h2>
-              <p className="text-xl font-semibold text-gray-900 dark:text-white mb-4 leading-snug">
-                Review the Photosynthesis Activity and explain the role of
-                glucose.
-              </p>
-              <div className="flex items-center gap-3">
-                <Link
-                  href="/materials/photosynthesis-activity"
-                  className="inline-flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-xs font-bold shadow-xs"
-                >
-                  Continue Activity
-                </Link>
-                <Link
-                  href="/materials/photosynthesis-activity/chat"
-                  className="inline-flex items-center justify-center px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg transition-colors text-xs font-semibold"
-                >
-                  Open Companion
-                </Link>
-              </div>
-            </div>
+        {/* Workflow Steps */}
+        <div className="flex items-center gap-2 flex-wrap text-xs text-muted">
+          {[
+            "Select Subject",
+            "Select Task",
+            "View Instructions",
+            "Open Chat",
+            "Receive Guidance",
+            "Review Questions",
+            "Add Comments",
+            "Continue",
+          ].map((step, i) => (
+            <span key={step} className="flex items-center gap-1">
+              {i > 0 && <ArrowRight className="w-3 h-3 text-muted/50" />}
+              <span className="bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
+                {step}
+              </span>
+            </span>
+          ))}
+        </div>
 
-            {/* 3. Continue Where You Left Off Card */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-xs border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
-              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
-                Continue Where You Left Off
-              </h2>
-              <div className="flex justify-between items-end mb-3">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Academic Stress Handout
-                </h3>
-                <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                  Question 3 of 5
-                </span>
-              </div>
-              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-5">
-                <div
-                  className="bg-indigo-600 h-2 rounded-full"
-                  style={{ width: "60%" }}
-                />
-              </div>
-              <Link
-                href="/materials/academic-stress-handout"
-                className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-xs font-semibold"
-              >
-                Resume Handout
-              </Link>
-            </div>
+        {/* Service Status */}
+        <div className="flex items-center gap-2 text-sm text-muted">
+          <span className={`w-2.5 h-2.5 rounded-full ${statusColor}`} />
+          <span>AI Service: {statusLabel}</span>
+          <span className="text-xs">— Gemini 3.8 Flash</span>
+        </div>
 
-            {/* 8. Recently Opened Activities */}
-            <div className="space-y-3">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                Recently Opened Materials
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {recentMaterials.map((material) => (
-                  <Link
-                    key={material.id}
-                    href={`/materials/${material.id}`}
-                    className="block p-4 bg-white dark:bg-gray-800 rounded-xl shadow-2xs border border-gray-200 dark:border-gray-700 hover:border-indigo-300 hover:shadow-sm transition-all"
-                  >
-                    <div className="text-[10px] uppercase font-bold text-indigo-600 dark:text-indigo-400 mb-1.5">
-                      {material.type}
-                    </div>
-                    <div className="font-semibold text-sm text-gray-900 dark:text-white line-clamp-2">
-                      {material.title}
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </div>
+        {/* Step 1: Subject Selector */}
+        <section>
+          <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+            <GraduationCap className="w-5 h-5 text-primary" />
+            Step 1: Select Subject
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {SUBJECTS.map((s) => {
+              const isSelected = selectedSubject?.id === s.id;
+              const isCustom = s.id === "custom";
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => handleSubjectSelect(s)}
+                  className={`flex items-center gap-3 p-4 rounded-xl border text-left transition-all ${
+                    isSelected
+                      ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                      : "border-card-border bg-card-bg hover:border-primary/40"
+                  }`}
+                >
+                  {isCustom ? (
+                    <Upload className="w-5 h-5 text-muted" />
+                  ) : (
+                    <BookOpen className="w-5 h-5 text-primary" />
+                  )}
+                  <span className="font-medium text-sm">{s.name}</span>
+                  {isSelected && (
+                    <CheckCircle2 className="w-4 h-4 text-primary ml-auto" />
+                  )}
+                </button>
+              );
+            })}
           </div>
+        </section>
 
-          <div className="space-y-6">
-            {/* 7. Gemini Service Status Card */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-xs border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
-              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
-                AI Service Status
-              </h2>
-              <div className="flex items-center gap-2.5 mb-2">
-                <span
-                  className={`w-2.5 h-2.5 rounded-full ${getStatusColor()}`}
-                />
-                <span className="font-bold text-sm text-gray-900 dark:text-white">
-                  {getStatusText()}
-                </span>
-              </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                Gemini Flash 3.8 — Contextual Academic Companion with multi-key
-                fallback rotation.
+        {/* Step 2: Task Selector or Custom Upload */}
+        {selectedSubject && selectedSubject.id !== "custom" && (
+          <section>
+            <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+              <FileText className="w-5 h-5 text-primary" />
+              Step 2: Select Task
+            </h2>
+            {tasks.length === 0 ? (
+              <p className="text-muted text-sm">
+                No preloaded tasks for this subject.
               </p>
-            </div>
-
-            {/* 4. Upcoming Deadlines Section */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-xs border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
-              <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-3">
-                Upcoming Deadlines
-              </h2>
+            ) : (
               <div className="space-y-3">
-                {upcomingMaterials.map((material) => (
-                  <Link
-                    key={material.id}
-                    href={`/materials/${material.id}`}
-                    className="block group p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
-                  >
-                    <div className="flex justify-between items-start mb-1">
-                      <h3 className="font-medium text-xs text-gray-900 dark:text-white group-hover:text-indigo-600 transition-colors line-clamp-1">
-                        {material.title}
-                      </h3>
-                      <span className="text-[10px] font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 px-1.5 py-0.5 rounded whitespace-nowrap ml-2">
-                        {new Date(material.deadline!).toLocaleDateString(
-                          undefined,
-                          {
-                            month: "short",
-                            day: "numeric",
-                          },
-                        )}
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1 mt-1.5">
-                      <div
-                        className="bg-indigo-600 h-1 rounded-full"
-                        style={{ width: `${material.progress}%` }}
-                      />
-                    </div>
-                  </Link>
-                ))}
+                {tasks.map((t) => {
+                  const isSelected = selectedTask?.id === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => handleTaskSelect(t)}
+                      className={`w-full flex items-start gap-3 p-4 rounded-xl border text-left transition-all ${
+                        isSelected
+                          ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                          : "border-card-border bg-card-bg hover:border-primary/40"
+                      }`}
+                    >
+                      <FileText className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm">{t.title}</p>
+                        <p className="text-xs text-muted mt-1 line-clamp-2">
+                          {t.instructions.split("\n")[0]}
+                        </p>
+                      </div>
+                      {isSelected && (
+                        <CheckCircle2 className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                      )}
+                    </button>
+                  );
+                })}
               </div>
+            )}
+          </section>
+        )}
+
+        {/* Custom Upload */}
+        {selectedSubject?.id === "custom" && (
+          <section>
+            <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+              <Upload className="w-5 h-5 text-primary" />
+              Step 2: Upload Academic Material
+            </h2>
+
+            <div className="border-2 border-dashed border-card-border rounded-xl p-6 text-center bg-card-bg">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".txt,.docx,.pdf"
+                onChange={handleFileUpload}
+                className="hidden"
+                id="file-upload"
+              />
+              <label
+                htmlFor="file-upload"
+                className="cursor-pointer flex flex-col items-center gap-2"
+              >
+                <Upload className="w-8 h-8 text-muted" />
+                <span className="text-sm font-medium">
+                  {isUploading
+                    ? "Processing..."
+                    : "Click to upload .txt, .docx, or .pdf"}
+                </span>
+                <span className="text-xs text-muted">
+                  The chatbot will use this content as the current discussion
+                  context.
+                </span>
+              </label>
             </div>
 
-            {/* 6. AI Literacy Prompt Card */}
-            <div className="bg-indigo-50 dark:bg-indigo-950/40 rounded-xl p-5 border border-indigo-100 dark:border-indigo-900/50 hover:shadow-md transition-shadow">
-              <div className="flex items-start gap-3">
-                <Lightbulb className="w-5 h-5 text-indigo-600 dark:text-indigo-400 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-indigo-900 dark:text-indigo-200 leading-relaxed">
-                  <span className="font-bold block mb-1">AI Literacy Tip:</span>
-                  AI-generated content may sound confident even when it is
-                  incomplete. What part of your current response should you
-                  verify against course rubrics?
+            {uploadError && (
+              <div className="mt-3 flex items-start gap-2 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg">
+                <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                <p className="text-sm text-red-700 dark:text-red-300">
+                  {uploadError}
                 </p>
               </div>
+            )}
+
+            {customDocument && (
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <FileText className="w-4 h-4 text-primary" />
+                  <span className="font-medium">{customDocument.fileName}</span>
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full ${
+                      customDocument.parseStatus === "readable"
+                        ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
+                        : "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300"
+                    }`}
+                  >
+                    {customDocument.parseStatus === "readable"
+                      ? "Readable"
+                      : "Needs manual input"}
+                  </span>
+                </div>
+
+                {customDocument.parseStatus === "readable" && (
+                  <p className="text-xs text-muted">
+                    Document loaded successfully. This confirms that the text
+                    can be read; it does not confirm that the content is correct
+                    or complete.
+                  </p>
+                )}
+
+                <div>
+                  <label className="text-xs font-medium text-muted block mb-1">
+                    Extracted text (editable):
+                  </label>
+                  <textarea
+                    value={editableText}
+                    onChange={(e) => handleEditableTextChange(e.target.value)}
+                    rows={8}
+                    className="w-full rounded-lg border border-card-border bg-gray-50 dark:bg-gray-900 p-3 text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary resize-y"
+                    placeholder="Paste or edit the document content here..."
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Manual paste fallback */}
+            {!customDocument && (
+              <div className="mt-4">
+                <label className="text-xs font-medium text-muted block mb-1">
+                  Or paste content manually:
+                </label>
+                <textarea
+                  value={editableText}
+                  onChange={(e) => {
+                    setEditableText(e.target.value);
+                    if (e.target.value.trim().length > 10) {
+                      setCustomDocument({
+                        fileName: "Manual Input",
+                        fileType: "text",
+                        extractedText: e.target.value,
+                        parseStatus: "readable",
+                      });
+                    }
+                  }}
+                  rows={6}
+                  className="w-full rounded-lg border border-card-border bg-gray-50 dark:bg-gray-900 p-3 text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary resize-y"
+                  placeholder="Paste your academic material here..."
+                />
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Step 3: Assistance Mode */}
+        {canProceed && (
+          <section>
+            <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-primary" />
+              Step 3: Assistance Mode
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {ASSISTANCE_MODES.map((m) => {
+                const Icon = modeIcons[m.id];
+                const isActive = assistanceMode === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => setAssistanceMode(m.id)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
+                      isActive
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-card-border bg-card-bg text-muted hover:border-primary/40"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {m.label}
+                  </button>
+                );
+              })}
             </div>
-          </div>
-        </div>
-
-        {/* 5. Quick Actions Grid */}
-        <div>
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-3">
-            Quick Actions
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Link
-              href="/materials"
-              className="flex flex-col items-center justify-center p-5 bg-white dark:bg-gray-800 rounded-xl shadow-2xs border border-gray-200 dark:border-gray-700 hover:shadow-sm hover:border-indigo-300 transition-all gap-2 group text-center"
-            >
-              <BookOpen className="w-6 h-6 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform" />
-              <span className="font-semibold text-xs text-gray-900 dark:text-white">
-                View All Materials
-              </span>
-            </Link>
-
-            <Link
-              href="/chat"
-              className="flex flex-col items-center justify-center p-5 bg-white dark:bg-gray-800 rounded-xl shadow-2xs border border-gray-200 dark:border-gray-700 hover:shadow-sm hover:border-indigo-300 transition-all gap-2 group text-center"
-            >
-              <Bot className="w-6 h-6 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform" />
-              <span className="font-semibold text-xs text-gray-900 dark:text-white">
-                Ask Task Companion
-              </span>
-            </Link>
-
-            <Link
-              href="/prototype-controls"
-              className="flex flex-col items-center justify-center p-5 bg-white dark:bg-gray-800 rounded-xl shadow-2xs border border-gray-200 dark:border-gray-700 hover:shadow-sm hover:border-indigo-300 transition-all gap-2 group text-center"
-            >
-              <RefreshCw className="w-6 h-6 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform" />
-              <span className="font-semibold text-xs text-gray-900 dark:text-white">
-                Prototype Controls
-              </span>
-            </Link>
-
-            <button
-              type="button"
-              onClick={() =>
-                alert(
-                  "Upload and document extraction will be available in future version.",
-                )
+            <p className="text-xs text-muted mt-2">
+              {
+                ASSISTANCE_MODES.find((m) => m.id === assistanceMode)
+                  ?.description
               }
-              className="flex flex-col items-center justify-center p-5 bg-white dark:bg-gray-800 rounded-xl shadow-2xs border border-gray-200 dark:border-gray-700 hover:shadow-sm hover:border-indigo-300 transition-all gap-2 group text-center"
+            </p>
+          </section>
+        )}
+
+        {/* Actions */}
+        {canProceed && (
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => router.push("/task")}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-card-border bg-card-bg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
             >
-              <FilePlus className="w-6 h-6 text-slate-400 group-hover:scale-110 transition-transform" />
-              <span className="font-semibold text-xs text-slate-500 dark:text-slate-400">
-                Add Material (Future)
-              </span>
+              <FileText className="w-4 h-4" />
+              View Task Details
+            </button>
+            <button
+              onClick={() => router.push("/task/chat")}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-dark transition-colors"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Open Chat
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
-        </div>
+        )}
       </div>
     </AppShell>
   );

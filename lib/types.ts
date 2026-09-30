@@ -1,60 +1,53 @@
-export type MaterialType =
-  | "Activity"
-  | "Handout"
-  | "Assignment"
-  | "Problem Set"
-  | "Presentation"
-  | "Reflection Paper"
-  | "Research Activity"
-  | "Worksheet"
-  | "Group Project"
-  | "Reading";
+/* StudyFlow — Simplified Thesis-Defense Prototype Types */
 
-export type AssistanceMode =
-  | "understand"
-  | "guide"
-  | "organize"
-  | "explore"
-  | "review"
-  | "draft";
+export type AssistanceMode = "explain" | "guide" | "review";
 
-export type LanguageMode = "english" | "filipino" | "taglish";
+export type ServiceSource = "gemini-live" | "gemini-backup" | "local-fallback";
+
+export type ServiceMode = "primary" | "fallback-1" | "fallback-2" | "local";
 
 export type ResponseStatus =
   | "needs_clarification"
   | "document_overview"
   | "guided_help"
   | "answer_review"
-  | "checklist"
-  | "draft";
+  | "checklist";
 
-export type ResponseType =
-  | ResponseStatus
-  | "explanation"
-  | "guidance"
-  | "checklist"
-  | "search_plan"
-  | "feedback"
-  | "example"
-  | "draft";
+/* ── Subject & Task ── */
 
-export type ServiceSource =
-  | "gemini-live"
-  | "gemini-backup"
-  | "local-fallback"
-  // Legacy aliases for backward compatibility
-  | "gemini-primary"
-  | "gemini-fallback-1"
-  | "gemini-fallback-2"
-  | "local-template"
-  | "demo-simulation";
+export interface Subject {
+  id: string;
+  name: string;
+}
 
-export type ServiceMode =
-  | "primary"
-  | "fallback-1"
-  | "fallback-2"
-  | "local"
-  | "demo";
+export interface PreloadedTask {
+  id: string;
+  subjectId: string;
+  title: string;
+  instructions: string;
+  content: string;
+}
+
+export interface CustomDocument {
+  fileName: string;
+  fileType: string;
+  extractedText: string;
+  parseStatus: "readable" | "simulated" | "failed";
+}
+
+/* ── Probing Questions ── */
+
+export interface ProbingQuestion {
+  question: string;
+  reason: string;
+}
+
+export interface ProbingQuestionComment {
+  question: string;
+  comment: string;
+}
+
+/* ── Document Evidence ── */
 
 export interface DocumentEvidenceItem {
   location: string;
@@ -62,113 +55,53 @@ export interface DocumentEvidenceItem {
   whyItMatters: string;
 }
 
-export interface Material {
-  id: string;
-  title: string;
-  type: MaterialType;
-  description: string;
-  instructions?: string;
-  content?: string;
-  deadline?: string;
-  progress: number; // 0-100
-  status: "not-started" | "in-progress" | "completed";
-  notes?: string;
-  currentTask?: string;
-  studentAnswer?: string;
-}
+/* ── AI Response ── */
 
 export interface GeminiResponse {
   status: ResponseStatus;
   directResponse: string;
-  response?: string; // backward compat alias for directResponse
-  responseType?: string; // backward compat
   documentEvidence?: DocumentEvidenceItem[];
   keyPoints: string[];
-  missingInformation?: string[];
+  probingQuestions: ProbingQuestion[];
   suggestedNextActions: string[];
-  suggestedNextAction?: string; // backward compat alias
-  followUpActions?: string[]; // backward compat alias
-  verificationQuestions: string[];
-  uncertainties?: string[];
-  requiresStudentAnswer?: boolean;
+  missingInformation?: string[];
+  requiresStudentAnswer: boolean;
   requiresReview: boolean;
-  languageMode?: LanguageMode;
 }
+
+/* ── Chat Message ── */
 
 export interface ChatMessage {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system";
   content: string;
   timestamp: string;
   assistanceMode?: AssistanceMode;
-  languageMode?: LanguageMode;
   responseData?: GeminiResponse;
   source?: ServiceSource;
-  attachedDocument?: {
-    name: string;
-    size: number;
-    wordCount?: number;
-  };
-  studentAnswer?: string;
+  probingQuestionComments?: ProbingQuestionComment[];
 }
+
+/* ── Chat Request ── */
 
 export interface ChatRequest {
-  material: {
-    id?: string;
-    title: string;
-    type: string;
-    instructions?: string;
-    content?: string;
-    description?: string;
-  };
-  currentTask?: string;
-  studentAnswer?: string | null;
-  userMessage?: string;
-  message?: string; // backward compat alias
-  assistanceMode: AssistanceMode;
-  languageMode?: LanguageMode;
-  conversationHistory: Array<{ role: "user" | "assistant"; content: string }>;
-  attachedDocument?: {
-    name: string;
-    size: number;
-    text?: string;
-    base64?: string;
-    wordCount?: number;
-  };
-  stream?: boolean;
-  forceMode?: ServiceMode;
-}
-
-export interface SavedResponse {
-  id: string;
-  materialId: string;
-  materialTitle: string;
-  materialType: MaterialType;
-  currentTask: string;
-  languageMode?: LanguageMode;
-  assistanceMode: AssistanceMode;
+  subject: Subject;
+  task: PreloadedTask | null;
+  customDocument: CustomDocument | null;
+  studentAnswer: string | null;
   userMessage: string;
-  studentAnswer?: string;
-  responseData: GeminiResponse;
-  reviewAnswers?: ReviewAnswers;
-  studentReflection?: string;
-  savedAt: string;
-  source: ServiceSource;
+  assistanceMode: AssistanceMode;
+  previousResponse: {
+    directResponse: string;
+    probingQuestions: ProbingQuestion[];
+  } | null;
+  probingQuestionComments: ProbingQuestionComment[];
+  conversationHistory: Array<{ role: "user" | "assistant"; content: string }>;
 }
 
-export interface ReviewAnswers {
-  mainIdea: string;
-  whatToVerify: string;
-  ownWords: string;
-}
+/* ── Prototype Settings ── */
 
 export interface PrototypeSettings {
   serviceMode: ServiceMode;
-  languageMode: LanguageMode;
   showReviewCheckpoint: boolean;
-  showDocumentEvidence: boolean;
-  showFuturePlaceholders: boolean;
 }
-
-// Alias for components that reference this type
-export type ChatResponseData = GeminiResponse;
